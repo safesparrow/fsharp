@@ -267,7 +267,7 @@ type FSharpSymbol(cenv: SymbolEnv, item: unit -> Item, access: FSharpSymbol -> C
         let dflt() = FSharpSymbol(cenv, (fun () -> item), (fun _ _ _ -> true)) 
         match item with
         | Item.Value v when v.Deref.IsClassConstructor ->
-            FSharpMemberOrFunctionOrValue(cenv, C (FSMeth(cenv.g, generalizeTyconRef v.TopValDeclaringEntity |> snd, v, None)), item) :> _
+            FSharpMemberOrFunctionOrValue(cenv, C (FSMeth(cenv.g, generalizeTyconRef cenv.g v.TopValDeclaringEntity |> snd, v, None)), item) :> _
 
         | Item.Value v -> FSharpMemberOrFunctionOrValue(cenv, V v, item) :> _
         | Item.UnionCase (uinfo, _) -> FSharpUnionCase(cenv, uinfo.UnionCaseRef) :> _
@@ -929,7 +929,7 @@ type FSharpEntity(cenv: SymbolEnv, entity:EntityRef) =
         | _ -> false
 
     member x.AsType() =
-         let ty = generalizedTyconRef entity
+         let ty = generalizedTyconRef cenv.g entity
          FSharpType(cenv, ty)
 
     override x.Equals(other: obj) =
@@ -1845,7 +1845,7 @@ type FSharpMemberOrFunctionOrValue(cenv, d:FSharpMemberOrValData, item) =
         | M (FSMeth (_, p, vref, _)) when vref.IsPropertyGetterMethod || vref.IsPropertySetterMethod ->
             Some (makeProp p vref)
         | V vref when vref.IsPropertyGetterMethod || vref.IsPropertySetterMethod ->
-            vref.MemberInfo |> Option.map (fun memInfo -> makeProp (generalizedTyconRef memInfo.ApparentEnclosingEntity) vref)
+            vref.MemberInfo |> Option.map (fun memInfo -> makeProp (generalizedTyconRef cenv.g memInfo.ApparentEnclosingEntity) vref)
         | _ -> None
 
     member _.IsEventAddMethod = 
