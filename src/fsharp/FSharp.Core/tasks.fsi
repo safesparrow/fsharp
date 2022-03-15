@@ -159,7 +159,7 @@ namespace Microsoft.FSharp.Control
         val backgroundTask: BackgroundTaskBuilder
     
 
-/// Contains the `task` computation expression builder.
+// Contains the `task` computation expression builder.
 namespace Microsoft.FSharp.Control.TaskBuilderExtensions 
 
     open System
