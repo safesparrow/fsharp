@@ -184,15 +184,14 @@ type FSharpDependencyManager (outputDirectory:string option) =
         //   if a path wasn't supplied to the dependency manager then use the temporary directory as the root
         //   if a path was supplied if it was rooted then use the rooted path as the root
         //   if the path wasn't supplied or not rooted use the temp directory as the root.
-        let directory =
+        outputDirectory |> ignore
+        let rec getDirectory () =
             let path = Path.Combine(Process.GetCurrentProcess().Id.ToString() + "--"+ Guid.NewGuid().ToString())
-            match outputDirectory with
-            | None -> Path.Combine(Path.GetTempPath(), path)
-            | Some v ->
-                if Path.IsPathRooted(v) then Path.Combine(v, path)
-                else Path.Combine(Path.GetTempPath(), path)
+            let fullPath = Path.Combine(Path.GetTempPath(), path)
+            if Directory.Exists(fullPath) then getDirectory () else fullPath
 
         lazy
+            let directory = getDirectory ()
             try
                 if not (Directory.Exists(directory)) then
                     Directory.CreateDirectory(directory) |> ignore
