@@ -926,6 +926,9 @@ type BackgroundCompiler(
           }
           |> Cancellable.toAsync
             
+    member _.GetCachedScriptOptions(path) =
+        incrementalBuildersCache.Keys(AnyCallerThread) |> List.tryFind (fun x -> x.ProjectFileName = path)
+
     member bc.InvalidateConfiguration(options: FSharpProjectOptions, userOpName) =
         if incrementalBuildersCache.ContainsSimilarKey (AnyCallerThread, options) then
             parseCacheLock.AcquireLock(fun ltok -> 
@@ -1081,6 +1084,9 @@ type FSharpChecker(legacyReferenceResolver,
         let sourceFiles = List.ofArray options.SourceFiles
         let argv = List.ofArray options.OtherOptions
         ic.GetParsingOptionsFromCommandLineArgs(sourceFiles, argv, options.UseScriptResolutionRules)
+
+    member _.GetCachedScriptOptions(path) =
+        backgroundCompiler.GetCachedScriptOptions(path + ".fsproj")
 
     member ic.ParseFile(filename, sourceText, options, ?cache, ?userOpName: string) =
         let cache = defaultArg cache true
