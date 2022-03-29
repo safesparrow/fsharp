@@ -43,7 +43,8 @@ type InheritanceContext =
 type RecordContext =
     | CopyOnUpdate of range: range * path: CompletionPath
     | Constructor of typeName: string
-    | New of path: CompletionPath
+    | Empty
+    | New of path: CompletionPath * isFirstField: bool
     | Declaration of isInIdentifier: bool
 
 [<RequireQualifiedAccess>]
@@ -956,7 +957,10 @@ module ParsedInput =
                                     Some (CompletionContext.ParameterList args)
                                 | _ -> 
                                     defaultTraverse expr
-                            
+
+                            | SynExpr.Record(None, None, [], _) ->
+                                Some(CompletionContext.RecordField RecordContext.Empty)
+
                             | _ -> defaultTraverse expr
 
                     member _.VisitRecordField(path, copyOpt, field) = 
@@ -965,7 +969,25 @@ module ParsedInput =
                             match path with
                             | SyntaxNode.SynExpr _ :: SyntaxNode.SynBinding _ :: SyntaxNode.SynMemberDefn _ :: SyntaxNode.SynTypeDefn(SynTypeDefn(typeInfo=SynComponentInfo(longId=[id]))) :: _ ->  
                                 RecordContext.Constructor(id.idText)
-                            | _ -> RecordContext.New completionPath
+
+                            | SyntaxNode.SynExpr(SynExpr.Record(None, _, SynExprRecordField(fieldName = lid, _) :: _, _)) :: _ ->
+                                let isFirstField = 
+                                    match field with
+                                    | Some contextLid -> contextLid.Range = lid.Range
+                                    | _ -> false
+
+                                RecordContext.New(completionPath, isFirstField)
+
+                            | SyntaxNode.SynExpr(SynExpr.ComputationExpr(_, SynExpr.Ident ident, _)) :: _ ->
+                                let isFirstField = 
+                                    match field with
+                                    | Some contextLid -> contextLid.Range = ident.idRange
+                                    | _ -> false
+
+                                RecordContext.New(completionPath, isFirstField)
+
+                            | _ ->
+                                RecordContext.New(completionPath, false)
                         match field with
                         | Some field -> 
                             match parseLid field with

@@ -236,8 +236,9 @@ let AddLocalSubModule g amap m env (modul: ModuleOrNamespace) =
  
 /// Add a "module X = ..." definition to the TcEnv and report it to the sink
 let AddLocalSubModuleAndReport tcSink scopem g amap m env (modul: ModuleOrNamespace) =
-    let env = AddLocalSubModule g amap m env modul 
-    CallEnvSink tcSink (scopem, env.NameEnv, env.eAccessRights)
+    let env = AddLocalSubModule g amap m env modul
+    if not (equals scopem m) then
+        CallEnvSink tcSink (scopem, env.NameEnv, env.eAccessRights)
     env
  
 /// Given an inferred module type, place that inside a namespace path implied by a "namespace X.Y.Z" definition
