@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="UnitTest1.fs" />
+        <Content Include="dumps\Program.fs.2022-06-03_225315.json" />
+        <Content Include="dumps\Program.fs.2022-06-03_225306.json" />
+        <Content Include="dumps\Program.fs.2022-06-03_224235.json" />
+        <Content Include="dumps\Program.fs.2022-06-03_224234.json" />
+        <Content Include="dumps\Program.fs.2022-06-03_221917.json" />
+        <Content Include="dumps\Program.fs.2022-06-03_221914.json" />
+        <Content Include="dumps\Program.fs.2022-06-03_221913.json" />
+        <Content Include="dumps\Program.fs.2022-06-03_221912.json" />
+        <Content Include="dumps\Program.fs.2022-06-03_221911.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_225534.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_225501.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_225500.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_224213.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_224207.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_224206.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_221923.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_221855.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_221854.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_221843.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_221841.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_214409.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_214407.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_214355.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_214354.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_214348.json" />
+        <Content Include="dumps\Library.fs.2022-06-03_214345.json" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="JetBrains.dotMemoryUnit" Version="3.1.20200127.214830" />
+        <PackageReference Include="Microsoft.FSharpLu.Json" Version="0.11.7" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.1.0" />
+        <PackageReference Include="Newtonsoft.Json" Version="10.0.1" />
+        <PackageReference Include="NUnit" Version="3.13.3" />
+        <PackageReference Include="NUnit3TestAdapter" Version="4.2.1" />
+        <PackageReference Include="NUnit.Analyzers" Version="3.3.0" />
+        <PackageReference Include="coverlet.collector" Version="3.1.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\src\Compiler\FSharp.Compiler.Service.fsproj" />
+    </ItemGroup>
+
+</Project>
