@@ -167,6 +167,7 @@ type ExtensionMember =
     /// later through 'open' get priority in overload resolution.
     member Priority: ExtensionMethodPriority
 
+
 /// The environment of information used to resolve names
 [<NoEquality; NoComparison>]
 type NameResolutionEnv =

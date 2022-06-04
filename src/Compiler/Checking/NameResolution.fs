@@ -1519,7 +1519,32 @@ let AddResults res1 res2 =
     match res1, res2 with
     | Result [], _ -> res2
     | _, Result [] -> res1
-    | Result x, Result l -> Result (x @ l)
+    | Result x, Result l ->
+        Audit.audit.Add(x |> List.length, l |> List.length)
+        Result (x @ l)
+    | Exception _, Result l -> Result l
+    | Result x, Exception _ -> Result x
+
+    // If we have error messages for the same symbol, then we can merge suggestions.
+    | Exception (UndefinedName(n1, f, id1, suggestions1)), Exception (UndefinedName(n2, _, id2, suggestions2)) when n1 = n2 && id1.idText = id2.idText && equals id1.idRange id2.idRange ->
+        Exception(UndefinedName(n1, f, id1, fun addToBuffer -> suggestions1 addToBuffer; suggestions2 addToBuffer))
+
+    // This prefers error messages coming from deeper failing long identifier paths
+    | Exception (UndefinedName(n1, _, _, _) as e1), Exception (UndefinedName(n2, _, _, _) as e2) ->
+        if n1 < n2 then Exception e2 else Exception e1
+
+    // Prefer more concrete errors about things being undefined
+    | Exception (UndefinedName _ as e1), Exception (DiagnosticWithText _) -> Exception e1
+    | Exception (DiagnosticWithText _), Exception (UndefinedName _ as e2) -> Exception e2
+    | Exception e1, Exception _ -> Exception e1
+    
+let AddResultsA res1 res2 =
+    match res1, res2 with
+    | Result [||], _ -> res2
+    | _, Result [||] -> res1
+    | Result x, Result l ->
+        Audit.audit.Add(x |> Array.length, l |> Array.length)
+        Result (x)
     | Exception _, Result l -> Result l
     | Result x, Exception _ -> Result x
 
@@ -2341,14 +2366,25 @@ let rec ResolveLongIdentAsModuleOrNamespace sink (atMostOne: ResultCollectionSet
                     else
                         moduleNotFound modref mty id depth
 
-            modrefs
-            |> List.map (fun modref ->
-                if IsEntityAccessible amap m ad modref then
-                    notifyNameResolution modref id.idRange
-                    look 1 modref rest
-                else
-                    raze (namespaceNotFound.Force()))
-            |> List.reduce AddResults
+            match modrefs with
+            | head :: tail ->
+                let mutable res =
+                    let modref = head
+                    if IsEntityAccessible amap m ad modref then
+                        notifyNameResolution modref id.idRange
+                        look 1 modref rest
+                    else
+                        raze (namespaceNotFound.Force())
+                for modref in tail do
+                    let y =
+                        if IsEntityAccessible amap m ad modref then
+                            notifyNameResolution modref id.idRange
+                            look 1 modref rest
+                        else
+                            raze (namespaceNotFound.Force())
+                    res <- AddResults res y
+                res
+            | _ -> failwith "foo"
         else
             raze (namespaceNotFound.Force())
 

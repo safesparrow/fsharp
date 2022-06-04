@@ -158,10 +158,21 @@ module X =
     [<Repeat(10)>]
     let TwoProjects () =
         go "Program.fs.2022-06-04_003526.json"
+        let a = Audit.audit
+        ()
         
     [<Test>]
     let FantomasEasy () =
         go "Parse.fs.2022-06-04_004240.json"
+        let a = Audit.audit
+        ()
+
+    
+    [<Test>]
+    let FantomasHard () =
+        go "DaemonTests.fs.2022-06-04_004541.json"
+        let a = Audit.audit
+        ()
             
     [<Test>]
     let Foo () =
