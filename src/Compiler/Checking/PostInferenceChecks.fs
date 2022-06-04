@@ -328,7 +328,40 @@ let RecordAnonRecdInfo cenv (anonInfo: AnonRecdTypeInfo) =
 // approx walk of type
 //--------------------------------------------------------------------------
 
-let rec CheckTypeDeep (cenv: cenv) (visitTy, visitTyconRefOpt, visitAppTyOpt, visitTraitSolutionOpt, visitTyparOpt as f) (g: TcGlobals) env isInner ty =
+
+/// Indicates whether a byref or byref-like type is permitted at a particular location
+[<RequireQualifiedAccess>]
+type PermitByRefType = 
+    /// Don't permit any byref or byref-like types
+    | None
+
+    /// Don't permit any byref or byref-like types on inner types.
+    | NoInnerByRefLike
+
+    /// Permit only a Span or IsByRefLike type
+    | SpanLike
+
+    /// Permit all byref and byref-like types
+    | All
+
+[<Struct>]
+type Stuff = {
+    PermitByRefLike : PermitByRefType
+    Cenv : cenv
+    Env : env
+    m : range
+    ty : TType
+    onInnerByrefError : unit -> unit
+}
+
+type IVisitors =
+    abstract member visitTy: TType -> unit
+    abstract member visitTyconRef: bool -> TyconRef -> unit
+    abstract member visitAppTy : (TyconRef * TypeInst) -> unit
+    abstract member visitTraitSolution : TraitConstraintSln -> unit
+    abstract member visitTyar : (env * Typar) -> unit
+
+let rec CheckTypeDeep (cenv: cenv) (v: IVisitors) (g: TcGlobals) env isInner ty =
     // We iterate the _solved_ constraints as well, to pick up any record of trait constraint solutions
     // This means we walk _all_ the constraints _everywhere_ in a type, including
     // those attached to _solved_ type variables. This is used by PostTypeCheckSemanticChecks to detect uses of
@@ -341,8 +374,8 @@ let rec CheckTypeDeep (cenv: cenv) (visitTy, visitTyconRefOpt, visitAppTyOpt, vi
         for cx in tp.Constraints do
             match cx with 
             | TyparConstraint.MayResolveMember(TTrait(_, _, _, _, _, soln), _) -> 
-                 match visitTraitSolutionOpt, soln.Value with 
-                 | Some visitTraitSolution, Some sln -> visitTraitSolution sln
+                 match soln.Value with 
+                 | Some sln -> v.visitTraitSolution sln
                  | _ -> ()
             | _ -> ()
     | _ -> ()
@@ -355,52 +388,45 @@ let rec CheckTypeDeep (cenv: cenv) (visitTy, visitTyconRefOpt, visitAppTyOpt, vi
             | _ -> stripTyEqns g ty
         else 
             stripTyEqns g ty
-    visitTy ty
+    v.visitTy ty
 
     match ty with
     | TType_forall (tps, body) -> 
         let env = BindTypars g env tps
-        CheckTypeDeep cenv f g env isInner body           
-        tps |> List.iter (fun tp -> tp.Constraints |> List.iter (CheckTypeConstraintDeep cenv f g env))
+        CheckTypeDeep cenv v g env isInner body           
+        tps |> List.iter (fun tp -> tp.Constraints |> List.iter (CheckTypeConstraintDeep cenv v g env))
 
     | TType_measure _ -> ()
 
     | TType_app (tcref, tinst, _) -> 
-        match visitTyconRefOpt with 
-        | Some visitTyconRef -> visitTyconRef isInner tcref 
-        | None -> ()
+        v.visitTyconRef isInner tcref
 
         // If it's a 'byref<'T>', don't check 'T as an inner. This allows byref<Span<'T>>.
         // 'byref<byref<'T>>' is invalid and gets checked in visitAppTy.
         if isByrefTyconRef g tcref then
-            CheckTypesDeepNoInner cenv f g env tinst
+            CheckTypesDeepNoInner cenv v g env tinst
         else
-            CheckTypesDeep cenv f g env tinst
+            CheckTypesDeep cenv v g env tinst
 
-        match visitAppTyOpt with 
-        | Some visitAppTy -> visitAppTy (tcref, tinst)
-        | None -> ()
+        v.visitAppTy ((tcref, tinst))
 
     | TType_anon (anonInfo, tys) -> 
         RecordAnonRecdInfo cenv anonInfo
-        CheckTypesDeep cenv f g env tys
+        CheckTypesDeep cenv v g env tys
 
     | TType_ucase (_, tinst) ->
-        CheckTypesDeep cenv f g env tinst
+        CheckTypesDeep cenv v g env tinst
 
     | TType_tuple (_, tys) ->
-        CheckTypesDeep cenv f g env tys
+        CheckTypesDeep cenv v g env tys
 
     | TType_fun (s, t, _) ->
-        CheckTypeDeep cenv f g env true s
-        CheckTypeDeep cenv f g env true t
+        CheckTypeDeep cenv v g env true s
+        CheckTypeDeep cenv v g env true t
 
     | TType_var (tp, _) -> 
           if not tp.IsSolved then 
-              match visitTyparOpt with 
-              | None -> ()
-              | Some visitTyar -> 
-                    visitTyar (env, tp)
+              v.visitTyar (env, tp)
 
 and CheckTypesDeep cenv f g env tys = 
     for ty in tys do
@@ -426,21 +452,39 @@ and CheckTypeConstraintDeep cenv f g env x =
      | TyparConstraint.IsReferenceType _ 
      | TyparConstraint.RequiresDefaultConstructor _ -> ()
 
-and CheckTraitInfoDeep cenv (_, _, _, visitTraitSolutionOpt, _ as f) g env (TTrait(tys, _, _, argTys, retTy, soln))  = 
-    CheckTypesDeep cenv f g env tys 
-    CheckTypesDeep cenv f g env argTys 
-    Option.iter (CheckTypeDeep cenv f g env true ) retTy
-    match visitTraitSolutionOpt, soln.Value with 
-    | Some visitTraitSolution, Some sln -> visitTraitSolution sln
+and CheckTraitInfoDeep cenv (v : IVisitors) g env (TTrait(tys, _, _, argTys, retTy, soln))  = 
+    CheckTypesDeep cenv v g env tys 
+    CheckTypesDeep cenv v g env argTys 
+    Option.iter (CheckTypeDeep cenv v g env true ) retTy
+    match soln.Value with 
+    | Some sln -> v.visitTraitSolution sln
     | _ -> ()
+
+type Visitors2(cenv, m, check) =
+    interface IVisitors with
+        member _.visitTy _ = ()
+        member _.visitTyconRef _deep tcref = if isByrefLikeTyconRef cenv.g m tcref then check()
+        member _.visitAppTy _ = ()
+        member _.visitTraitSolution _ = ()
+        member _.visitTyar _ = ()
+    
 
 /// Check for byref-like types
 let CheckForByrefLikeType cenv env m ty check = 
-    CheckTypeDeep cenv (ignore, Some (fun _deep tcref -> if isByrefLikeTyconRef cenv.g m tcref then check()),  None, None, None) cenv.g env false ty
+    CheckTypeDeep cenv (Visitors2(cenv, m, check)) cenv.g env false ty
+
+type Visitors3(cenv, check) =
+    interface IVisitors with
+        member _.visitTy _ = ()
+        member _.visitTyconRef _deep tcref = if isByrefTyconRef cenv.g tcref then check()
+        member _.visitAppTy _ = ()
+        member _.visitTraitSolution _ = ()
+        member _.visitTyar _ = ()
+    
 
 /// Check for byref types
 let CheckForByrefType cenv env ty check = 
-    CheckTypeDeep cenv (ignore, Some (fun _deep tcref -> if isByrefTyconRef cenv.g tcref then check()),  None, None, None) cenv.g env false ty
+    CheckTypeDeep cenv (Visitors3(cenv, check)) cenv.g env false ty
 
 /// check captures under lambdas
 ///
@@ -494,6 +538,13 @@ let AccessInternalsVisibleToAsInternal thisCompPath internalsVisibleToPaths acce
     (access, internalsVisibleToPaths) ||> List.fold (fun access internalsVisibleToPath -> 
         accessSubstPaths (thisCompPath, internalsVisibleToPath) access)
     
+type VisitorsTyOnly(act : TType -> unit) =
+    interface IVisitors with
+        member _.visitTy ty = act ty
+        member _.visitTyconRef _ _ = ()
+        member _.visitAppTy _ = ()
+        member _.visitTraitSolution _ = ()
+        member _.visitTyar _ = ()
 
 let CheckTypeForAccess (cenv: cenv) env objName valAcc m ty =
     if cenv.reportErrors then 
@@ -509,7 +560,7 @@ let CheckTypeForAccess (cenv: cenv) env objName valAcc m ty =
                 if isLessAccessible tyconAcc valAcc then
                     errorR(Error(FSComp.SR.chkTypeLessAccessibleThanType(tcref.DisplayName, (objName())), m))
 
-        CheckTypeDeep cenv (visitType, None, None, None, None) cenv.g env false ty
+        CheckTypeDeep cenv (VisitorsTyOnly(visitType)) cenv.g env false ty
 
 let WarnOnWrongTypeForAccess (cenv: cenv) env objName valAcc m ty =
     if cenv.reportErrors then 
@@ -527,22 +578,7 @@ let WarnOnWrongTypeForAccess (cenv: cenv) env objName valAcc m ty =
                     let warningText = errorText + Environment.NewLine + FSComp.SR.tcTypeAbbreviationsCheckedAtCompileTime()
                     warning(AttributeChecking.ObsoleteWarning(warningText, m))
 
-        CheckTypeDeep cenv (visitType, None, None, None, None) cenv.g env false ty 
-
-/// Indicates whether a byref or byref-like type is permitted at a particular location
-[<RequireQualifiedAccess>]
-type PermitByRefType = 
-    /// Don't permit any byref or byref-like types
-    | None
-
-    /// Don't permit any byref or byref-like types on inner types.
-    | NoInnerByRefLike
-
-    /// Permit only a Span or IsByRefLike type
-    | SpanLike
-
-    /// Permit all byref and byref-like types
-    | All
+        CheckTypeDeep cenv (VisitorsTyOnly(visitType)) cenv.g env false ty 
 
     
 /// Indicates whether an address-of operation is permitted at a particular location
@@ -612,53 +648,72 @@ let rec mkArgsForAppliedExpr isBaseCall argsl x =
     | Expr.Op (TOp.Coerce, _, [f], _) -> mkArgsForAppliedExpr isBaseCall argsl f        
     | _  -> []
 
+
+[<Sealed>]
+type Visitors(s : Stuff) =
+    static member private _visitTyconRef (isInner: bool) (tcref: TyconRef) ({PermitByRefLike = permitByRefLike; onInnerByrefError = onInnerByrefError; Cenv = cenv; m = m } : Stuff) : unit =
+        let isInnerByRefLike = isInner && isByrefLikeTyconRef cenv.g m tcref
+
+        match permitByRefLike with
+        | PermitByRefType.None when isByrefLikeTyconRef cenv.g m tcref ->
+            errorR(Error(FSComp.SR.chkErrorUseOfByref(), m))
+        | PermitByRefType.NoInnerByRefLike when isInnerByRefLike ->
+            onInnerByrefError ()
+        | PermitByRefType.SpanLike when isByrefTyconRef cenv.g tcref || isInnerByRefLike ->
+            onInnerByrefError ()
+        | _ -> ()
+
+        if tyconRefEq cenv.g cenv.g.system_Void_tcref tcref then 
+            errorR(Error(FSComp.SR.chkSystemVoidOnlyInTypeof(), m))
+    
+    // check if T contains byref types in case of byref<T>
+    static member private _visitAppTy (tcref, tinst) ({Cenv = cenv; m = m; ty = ty; Env = env } : Stuff) = 
+        if isByrefLikeTyconRef cenv.g m tcref then
+            let visitType ty0 =
+                match tryTcrefOfAppTy cenv.g ty0 with
+                | ValueNone -> ()
+                | ValueSome tcref2 ->  
+                    if isByrefTyconRef cenv.g tcref2 then 
+                        errorR(Error(FSComp.SR.chkNoByrefsOfByrefs(NicePrint.minimalStringOfType cenv.denv ty), m)) 
+            CheckTypesDeep cenv (VisitorsTyOnly(visitType)) cenv.g env tinst
+            
+    static member private _visitTraitSolution info ({Cenv = cenv; m = m} : Stuff) = 
+        match info with 
+        | FSMethSln(_, vref, _) -> 
+           //printfn "considering %s..." vref.DisplayName
+           if valRefInThisAssembly cenv.g.compilingFSharpCore vref && not (cenv.boundVals.ContainsKey(vref.Stamp)) then 
+               //printfn "recording %s..." vref.DisplayName
+               cenv.potentialUnboundUsesOfVals <- cenv.potentialUnboundUsesOfVals.Add(vref.Stamp, m)
+        | _ -> ()
+        
+    static member private _visitTyar (env, tp) ({m = m} : Stuff) = 
+        if not (env.boundTypars.ContainsKey tp) then 
+           if tp.IsCompilerGenerated then 
+             errorR (Error(FSComp.SR.checkNotSufficientlyGenericBecauseOfScopeAnon(), m))
+           else
+             errorR (Error(FSComp.SR.checkNotSufficientlyGenericBecauseOfScope(tp.DisplayName), m))
+    
+    interface IVisitors with
+        member _.visitTy (_ : TType) = ()
+        member _.visitTyconRef (isInner: bool) (tcref: TyconRef) = Visitors._visitTyconRef isInner tcref s
+        member _.visitAppTy a = Visitors._visitAppTy a s
+        member _.visitTraitSolution info = Visitors._visitTraitSolution info s
+        member _.visitTyar info = Visitors._visitTyar info s
+    
+
 /// Check types occurring in the TAST.
 let CheckTypeAux permitByRefLike (cenv: cenv) env m ty onInnerByrefError =
+    let s : Stuff = {
+        PermitByRefLike = permitByRefLike
+        Cenv = cenv
+        Env = env
+        m = m
+        ty = ty
+        onInnerByrefError = onInnerByrefError
+    }
+    let v = Visitors(s)
     if cenv.reportErrors then 
-        let visitTyar (env, tp) = 
-          if not (env.boundTypars.ContainsKey tp) then 
-             if tp.IsCompilerGenerated then 
-               errorR (Error(FSComp.SR.checkNotSufficientlyGenericBecauseOfScopeAnon(), m))
-             else
-               errorR (Error(FSComp.SR.checkNotSufficientlyGenericBecauseOfScope(tp.DisplayName), m))
-
-        let visitTyconRef isInner tcref =
-        
-            let isInnerByRefLike = isInner && isByrefLikeTyconRef cenv.g m tcref
-
-            match permitByRefLike with
-            | PermitByRefType.None when isByrefLikeTyconRef cenv.g m tcref ->
-                errorR(Error(FSComp.SR.chkErrorUseOfByref(), m))
-            | PermitByRefType.NoInnerByRefLike when isInnerByRefLike ->
-                onInnerByrefError ()
-            | PermitByRefType.SpanLike when isByrefTyconRef cenv.g tcref || isInnerByRefLike ->
-                onInnerByrefError ()
-            | _ -> ()
-
-            if tyconRefEq cenv.g cenv.g.system_Void_tcref tcref then 
-                errorR(Error(FSComp.SR.chkSystemVoidOnlyInTypeof(), m))
-
-        // check if T contains byref types in case of byref<T>
-        let visitAppTy (tcref, tinst) = 
-            if isByrefLikeTyconRef cenv.g m tcref then
-                let visitType ty0 =
-                    match tryTcrefOfAppTy cenv.g ty0 with
-                    | ValueNone -> ()
-                    | ValueSome tcref2 ->  
-                        if isByrefTyconRef cenv.g tcref2 then 
-                            errorR(Error(FSComp.SR.chkNoByrefsOfByrefs(NicePrint.minimalStringOfType cenv.denv ty), m)) 
-                CheckTypesDeep cenv (visitType, None, None, None, None) cenv.g env tinst
-
-        let visitTraitSolution info = 
-            match info with 
-            | FSMethSln(_, vref, _) -> 
-               //printfn "considering %s..." vref.DisplayName
-               if valRefInThisAssembly cenv.g.compilingFSharpCore vref && not (cenv.boundVals.ContainsKey(vref.Stamp)) then 
-                   //printfn "recording %s..." vref.DisplayName
-                   cenv.potentialUnboundUsesOfVals <- cenv.potentialUnboundUsesOfVals.Add(vref.Stamp, m)
-            | _ -> ()
-
-        CheckTypeDeep cenv (ignore, Some visitTyconRef, Some visitAppTy, Some visitTraitSolution, Some visitTyar) cenv.g env false ty
+        CheckTypeDeep cenv (v :> IVisitors) cenv.g env false ty
 
 let CheckType permitByRefLike cenv env m ty =
     CheckTypeAux permitByRefLike cenv env m ty (fun () -> errorR(Error(FSComp.SR.chkErrorUseOfByref(), m)))
