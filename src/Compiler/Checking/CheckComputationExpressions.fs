@@ -2227,19 +2227,19 @@ let TcArrayOrListComputedExpression (cenv: cenv) env (overallTy: OverallTy) tpen
         let replacementExpr = 
             if isArray then 
                 // This are to improve parsing/processing speed for parser tables by converting to an array blob ASAP 
-                let nelems = elems.Length 
-                if nelems > 0 && List.forall (function SynExpr.Const (SynConst.UInt16 _, _) -> true | _ -> false) elems 
-                then SynExpr.Const (SynConst.UInt16s (Array.ofList (List.map (function SynExpr.Const (SynConst.UInt16 x, _) -> x | _ -> failwith "unreachable") elems)), m)
-                elif nelems > 0 && List.forall (function SynExpr.Const (SynConst.Byte _, _) -> true | _ -> false) elems 
-                then SynExpr.Const (SynConst.Bytes (Array.ofList (List.map (function SynExpr.Const (SynConst.Byte x, _) -> x | _ -> failwith "unreachable") elems), SynByteStringKind.Regular, m), m)
-                else SynExpr.ArrayOrList (isArray, elems, m)
+                let nelems = elems.Count
+                if nelems > 0 && Seq.forall (function SynExpr.Const (SynConst.UInt16 _, _) -> true | _ -> false) elems 
+                then SynExpr.Const (SynConst.UInt16s (Array.ofSeq (Seq.map (function SynExpr.Const (SynConst.UInt16 x, _) -> x | _ -> failwith "unreachable") elems)), m)
+                elif nelems > 0 && Seq.forall (function SynExpr.Const (SynConst.Byte _, _) -> true | _ -> false) elems 
+                then SynExpr.Const (SynConst.Bytes (Array.ofSeq (Seq.map (function SynExpr.Const (SynConst.Byte x, _) -> x | _ -> failwith "unreachable") elems), SynByteStringKind.Regular, m), m)
+                else SynExpr.ArrayOrList (isArray, elems |> Seq.toList, m)
             else
                 if cenv.g.langVersion.SupportsFeature(LanguageFeature.ReallyLongLists) then
-                     SynExpr.ArrayOrList (isArray, elems, m)
+                     SynExpr.ArrayOrList (isArray, elems |> Seq.toList, m)
                  else
-                    if elems.Length > 500 then 
+                    if elems.Count > 500 then 
                         error(Error(FSComp.SR.tcListLiteralMaxSize(), m))
-                    SynExpr.ArrayOrList (isArray, elems, m)
+                    SynExpr.ArrayOrList (isArray, elems |> Seq.toList, m)
 
         TcExprUndelayed cenv overallTy env tpenv replacementExpr
     | _ -> 

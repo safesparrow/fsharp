@@ -156,25 +156,29 @@ module X =
         
     [<Test>]
     [<Repeat(10)>]
+    [<Explicit>]
     let TwoProjects () =
         go "Program.fs.2022-06-04_003526.json"
-        let a = Audit.audit
+        // let a = Audit.audit
         ()
         
     [<Test>]
+    [<Explicit>]
     let FantomasEasy () =
         go "Parse.fs.2022-06-04_004240.json"
-        let a = Audit.audit
+        // let a = Audit.audit
         ()
 
     
     [<Test>]
+    [<Explicit>]
     let FantomasHard () =
         go "DaemonTests.fs.2022-06-04_004541.json"
-        let a = Audit.audit
+        // let a = Audit.audit
         ()
             
     [<Test>]
+    [<Explicit>]
     let Foo () =
         let b = {
             FSharpProjectOptions.ProjectFileName = "b"
@@ -213,6 +217,7 @@ module X =
         ()
         
     [<Test>]
+    [<Explicit>]
     let Test1 () =
         let sw = Stopwatch.StartNew()
         
