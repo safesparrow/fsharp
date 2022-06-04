@@ -404,7 +404,7 @@ let rec isMemOfActives p1 actives =
 let rec lookupActive x l =
     match l with
     | [] -> raise (KeyNotFoundException())
-    | Active(h, r1, r2) :: t -> if pathEq x h then (r1, r2) else lookupActive x t
+    | Active(h, r1, r2) :: t -> if pathEq x h then struct (r1, r2) else lookupActive x t
 
 let rec removeActive x l =
     match l with
@@ -1185,7 +1185,7 @@ let CompilePatternBasic
     and ChooseSimultaneousEdges frontiers path =
         frontiers |> chooseSimultaneousEdgeSet [] (fun prev (Frontier (i, active, _)) ->
             if isMemOfActives path active then
-                let _, patAtActive = lookupActive path active
+                let struct(_, patAtActive) = lookupActive path active
                 match getDiscrimOfPattern patAtActive with
                 | Some discrim ->
                     if discrimWithinSimultaneousClass g amap patAtActive.Range discrim prev then
@@ -1362,7 +1362,7 @@ let CompilePatternBasic
 
         let isRefuted (Frontier (_i', active, _)) =
             isMemOfActives path active &&
-            let _, patAtActive = lookupActive path active
+            let struct(_, patAtActive) = lookupActive path active
             match getDiscrimOfPattern patAtActive with
             | Some discrim -> List.exists (isDiscrimSubsumedBy g amap mExpr discrim) simulSetOfDiscrims
             | None -> false
@@ -1392,7 +1392,7 @@ let CompilePatternBasic
         let (Frontier (i, actives, valMap)) = frontier
 
         if isMemOfActives path actives then
-            let (subExprForActive, patAtActive) = lookupActive path actives
+            let struct(subExprForActive, patAtActive) = lookupActive path actives
             let (SubExpr(accessf, ve)) = subExprForActive
 
             let mkSubFrontiers path subAccess subActive argpats pathBuilder =

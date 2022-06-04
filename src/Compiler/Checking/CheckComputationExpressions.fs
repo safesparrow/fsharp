@@ -178,20 +178,23 @@ let (|SimpleSemicolonSequence|_|) cenv acceptDeprecated cexpr =
         | SynExpr.While _ -> false
         | _ -> true
 
-    let rec TryGetSimpleSemicolonSequenceOfComprehension expr acc = 
+    let acc = System.Collections.Generic.List()
+    let rec TryGetSimpleSemicolonSequenceOfComprehension expr = 
         match expr with 
         | SynExpr.Sequential (_, true, e1, e2, _) -> 
-            if IsSimpleSemicolonSequenceElement e1 then 
-                TryGetSimpleSemicolonSequenceOfComprehension e2 (e1 :: acc)
+            if IsSimpleSemicolonSequenceElement e1 then
+                acc.Add(e1)
+                TryGetSimpleSemicolonSequenceOfComprehension e2
             else
                 None 
         | _ -> 
-            if IsSimpleSemicolonSequenceElement expr then 
-                Some(List.rev (expr :: acc))
+            if IsSimpleSemicolonSequenceElement expr then
+                acc.Add(expr)
+                Some(acc)
             else 
                 None 
 
-    TryGetSimpleSemicolonSequenceOfComprehension cexpr []
+    TryGetSimpleSemicolonSequenceOfComprehension cexpr
 
 let RecordNameAndTypeResolutions cenv env tpenv expr =
     // This function is motivated by cases like
