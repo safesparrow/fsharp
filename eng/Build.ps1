@@ -211,6 +211,7 @@ function BuildSolution([string] $solutionName) {
 
     MSBuild $toolsetBuildProj `
         $bl `
+        /m:5
         /p:Configuration=$configuration `
         /p:Projects=$projects `
         /p:RepoRoot=$RepoRoot `

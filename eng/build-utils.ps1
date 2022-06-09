@@ -196,7 +196,7 @@ function Run-MSBuild([string]$projectFilePath, [string]$buildArgs = "", [string]
     }
 
     if ($parallel) {
-        $args += " /m"
+        $args += " /m:6"
     }
 
     if ($binaryLog) {
