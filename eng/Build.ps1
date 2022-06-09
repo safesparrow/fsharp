@@ -210,10 +210,11 @@ function BuildSolution([string] $solutionName) {
 
     # Do not set the property to true explicitly, since that would override value projects might set.
     $suppressExtensionDeployment = if (!$deployExtensions) { "/p:DeployExtension=false" } else { "" }
+    $m = Get-ChildItem -Path Env:\M
 
     MSBuild $toolsetBuildProj `
         $bl `
-        /m:5 `
+        /m:$m `
         /p:Configuration=$configuration `
         /p:Projects=$projects `
         /p:RepoRoot=$RepoRoot `

@@ -195,8 +195,9 @@ function Run-MSBuild([string]$projectFilePath, [string]$buildArgs = "", [string]
         $args += " /consoleloggerparameters:Verbosity=minimal"
     }
 
+    $m = Get-ChildItem -Path Env:\M
     if ($parallel) {
-        $args += " /m:6"
+        $args += " /m:$m"
     }
 
     if ($binaryLog) {
