@@ -3337,8 +3337,8 @@ type EntityRef =
         match XX.notNull tcr.binding with 
         | false ->
             tcr.Resolve(canError=true)
-            match tcr.binding with 
-            | null -> error (InternalUndefinedItemRef (FSComp.SR.tastUndefinedItemRefModuleNamespaceType, String.concat "." tcr.nlr.EnclosingMangledPath, tcr.nlr.AssemblyName, tcr.nlr.LastItemMangledName))
+            match XX.notNull tcr.binding with 
+            | false -> error (InternalUndefinedItemRef (FSComp.SR.tastUndefinedItemRefModuleNamespaceType, String.concat "." tcr.nlr.EnclosingMangledPath, tcr.nlr.AssemblyName, tcr.nlr.LastItemMangledName))
             | _ -> tcr.binding
         | true -> 
             tcr.binding
