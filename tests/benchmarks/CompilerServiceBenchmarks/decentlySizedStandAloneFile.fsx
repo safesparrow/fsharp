@@ -92,13 +92,13 @@
         let pline = line - 1
         if pline >= 1 then 
           let num = lineNum pline nrl
-          result := num+": "+source.[pline-1]+"\n"
+          result <- num+": "+source.[pline-1]+"\n"
 
         //current line
         let text = source.[line-1]
         if column <= text.Length then
           let arrow = "-" |> stringRepeat (nrl + column)
-          result := !result+nr+": "+text+"\n"+arrow+"^\n"
+          result <- !result+nr+": "+text+"\n"+arrow+"^\n"
 
       !result
 
@@ -143,13 +143,13 @@
 
   let skip parser =
     match !parser.Input with
-    | _::input -> parser.Input := input
+    | _::input -> parser.Input <- input
     | _ -> unexpectedEnd ()
 
   let skipIf type' parser =
     match !parser.Input with
     | token::xs when parser.Type token = type' -> 
-      parser.Input := xs
+      parser.Input <- xs
 
     | token::_ -> 
       unexpectedToken token parser
