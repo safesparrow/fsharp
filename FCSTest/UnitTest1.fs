@@ -4,11 +4,11 @@ open System
 open System.Diagnostics
 open System.IO
 open System.Text.Json.Serialization
-open FCSTest
 open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.Text
 open Microsoft.FSharp.Reflection
 open NUnit.Framework
+open Newtonsoft.Json
 open Newtonsoft.Json.Linq
 
 [<AutoOpen>]
@@ -159,6 +159,13 @@ module Serializing =
         let o = convert o
         let pairs = Dirs.toPlaceholders d
         replacePaths pairs o
+    
+    let replaceArgs (p : PrefixSwapPair[]) (a : FakeParseArgs) =
+        {
+            a with
+                fileName = swapPrefixes p a.fileName
+                options = replacePaths p a.options
+        }
         
     let deserialize (d : Dirs) (json : string) : ParseArgs =
         let fake = Newtonsoft.Json.JsonConvert.DeserializeObject<FakeParseArgs> json
@@ -208,10 +215,24 @@ module X =
     let modifyText (text : ISourceText) =
         SourceText.ofString (text.GetSubTextString(0, text.Length) + $"//{r.Next()}")
         
+    let dirs = {
+        NugetPackages = "-r:C:\\Users\\janus\\.nuget\\packages"
+        CodeRoot = "D:\\projekty\\fantomas"
+    }
+    
+    let convertJsonFile (path : string) =
+        let json = File.ReadAllText(path)
+        let fake = Newtonsoft.Json.JsonConvert.DeserializeObject<FakeParseArgs> json
+        let replaced = replaceArgs (dirs |> Dirs.toPlaceholders) fake
+        let json = Newtonsoft.Json.JsonConvert.SerializeObject(replaced, Formatting.Indented)
+        File.WriteAllText(path, json)
+        
     let go (name : string) =
         let sw = Stopwatch.StartNew()
-        let argsJson = File.ReadAllText("d:/projekty/fsharp/FCSTest/dumps/" + name)
-        let args = deserialize argsJson
+        let path = "d:/projekty/fsharp/FCSTest/dumps/" + name
+        convertJsonFile path
+        let argsJson = File.ReadAllText(path)
+        let args = deserialize dirs argsJson
         let args = {args with sourceText = modifyText args.sourceText}
         let x = parseAndCheckFileInProject args
         let y = x |> Async.RunSynchronously
@@ -224,7 +245,7 @@ module X =
         |> Array.iter (fun name ->
             let argsJson = File.ReadAllText("d:/projekty/fsharp/FCSTest/dumps/" + name)
             let sw = Stopwatch.StartNew()
-            let args = deserialize argsJson
+            let args = deserialize dirs argsJson
             let args = {args with sourceText = modifyText args.sourceText}
             let x = parseAndCheckFileInProject args
             let y = x |> Async.RunSynchronously
@@ -298,9 +319,9 @@ module X =
                      sourceText = SourceText.ofString "source"
                      ParseArgs.options = a
         }
-        let json = serialize args
+        let json = serialize dirs args
         File.WriteAllText("d:/projekty/fsharp/fcstest/serialized.json", json)
-        let roundtrip = deserialize json
+        let roundtrip = deserialize dirs json
         ()
         
     [<Test>]
@@ -310,7 +331,7 @@ module X =
         
         let name = "Library.fs.2022-06-03_214345.json"
         let argsJson = File.ReadAllText("d:/projekty/fsharp/FCSTest/dumps/" + name)
-        let args = deserialize argsJson
+        let args = deserialize dirs argsJson
         let x = parseAndCheckFileInProject args
         let y = x |> Async.RunSynchronously
         System.Console.WriteLine (sw.Elapsed)
