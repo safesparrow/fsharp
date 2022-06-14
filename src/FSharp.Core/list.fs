@@ -2,6 +2,7 @@
 
 namespace Microsoft.FSharp.Collections
 
+open System
 open Microsoft.FSharp.Core
 open Microsoft.FSharp.Core.Operators
 open Microsoft.FSharp.Core.LanguagePrimitives
@@ -13,6 +14,40 @@ open System.Collections.Generic
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 [<RequireQualifiedAccess>]
 module List =
+    
+    [<StructuralEquality; StructuralComparison>]
+    [<RequireQualifiedAccess>]
+    type CollectionType = | List | Array
+    
+    [<StructuralEquality; StructuralComparison>]
+    type Key =
+        {
+            CollectionType : CollectionType
+            Type : string
+            Function : string
+        }
+        
+    let calls = Dictionary<Key, obj>()
+
+    let recordGeneric (key : Key) (value : 'a) =
+        if calls.ContainsKey key then
+            (calls[key] :?> List<'a>).Add(value)
+        else calls[key] <- List({value})
+    
+#if COLLECTION_TRACE
+    let recordEntry<'a> (functionName : string) (list : 'a list) =
+        let key = {
+            CollectionType = CollectionType.List
+            Type = typeof<'a>.ToString()
+            Function = functionName
+        }
+        let value = list.Length
+        recordGeneric key value
+    
+    let recordEntryReturn<'a> (functionName : string) (list : 'a list) =
+        recordEntry functionName list
+        list
+#endif
 
     let inline checkNonNull argName arg =
         if isNull arg then nullArg argName
@@ -22,27 +57,43 @@ module List =
 
     [<CompiledName("Length")>]
     let length (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "length"
+#endif
         list.Length
 
     [<CompiledName("Last")>]
     let last (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "last"
+#endif
         match Microsoft.FSharp.Primitives.Basics.List.tryLastV list with
         | ValueSome x -> x
         | ValueNone -> invalidArg "list" (SR.GetString(SR.inputListWasEmpty))
 
     [<CompiledName("TryLast")>]
     let rec tryLast (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "tryLast"
+#endif
         match Microsoft.FSharp.Primitives.Basics.List.tryLastV list with
         | ValueSome x -> Some x
         | ValueNone -> None
+    
 
     [<CompiledName("Reverse")>]
     let rev list =
+#if COLLECTION_TRACE
+        list |> recordEntry "reverse"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.rev list
 
     [<CompiledName("Concat")>]
     let concat lists =
         Microsoft.FSharp.Primitives.Basics.List.concat lists
+#if COLLECTION_TRACE
+        |> recordEntryReturn "concat"
+#endif
 
     let inline countByImpl
         (comparer: IEqualityComparer<'SafeKey>)
@@ -94,21 +145,36 @@ module List =
     [<CompiledName("Map")>]
     let map mapping list =
         Microsoft.FSharp.Primitives.Basics.List.map mapping list
+#if COLLECTION_TRACE
+        |> recordEntryReturn "map"
+#endif
 
     [<CompiledName("MapIndexed")>]
     let mapi mapping list =
         Microsoft.FSharp.Primitives.Basics.List.mapi mapping list
+#if COLLECTION_TRACE
+        |> recordEntryReturn "mapi"
+#endif
 
     [<CompiledName("Indexed")>]
     let indexed list =
         Microsoft.FSharp.Primitives.Basics.List.indexed list
+#if COLLECTION_TRACE
+        |> recordEntryReturn "indexed"
+#endif
 
     [<CompiledName("MapFold")>]
     let mapFold<'T, 'State, 'Result> (mapping: 'State -> 'T -> 'Result * 'State) state list =
+#if COLLECTION_TRACE
+        list |> recordEntry "mapFold"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.mapFold mapping state list
 
     [<CompiledName("MapFoldBack")>]
     let mapFoldBack<'T, 'State, 'Result> (mapping: 'T -> 'State -> 'Result * 'State) list state =
+#if COLLECTION_TRACE
+        list |> recordEntry "mapFoldBack"
+#endif
         match list with
         | [] -> [], state
         | [ h ] -> let h', s' = mapping h state in [ h' ], s'
@@ -126,23 +192,38 @@ module List =
 
     [<CompiledName("Iterate")>]
     let inline iter ([<InlineIfLambda>] action) (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "iter"
+#endif
         for x in list do
             action x
 
     [<CompiledName("Distinct")>]
     let distinct (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "distinct"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.distinctWithComparer HashIdentity.Structural<'T> list
 
     [<CompiledName("DistinctBy")>]
     let distinctBy projection (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "distinctBy"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.distinctByWithComparer HashIdentity.Structural<_> projection list
 
     [<CompiledName("OfArray")>]
     let ofArray (array: 'T array) =
         Microsoft.FSharp.Primitives.Basics.List.ofArray array
+#if COLLECTION_TRACE
+        |> recordEntryReturn "ofArray"        
+#endif
 
     [<CompiledName("ToArray")>]
     let toArray (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "toArray"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.toArray list
 
     [<CompiledName("Empty")>]
@@ -150,24 +231,36 @@ module List =
 
     [<CompiledName("Head")>]
     let head list =
+#if COLLECTION_TRACE
+        list |> recordEntry "head"
+#endif
         match list with
         | x :: _ -> x
         | [] -> invalidArg "list" (SR.GetString(SR.inputListWasEmpty))
 
     [<CompiledName("TryHead")>]
     let tryHead list =
+#if COLLECTION_TRACE
+        list |> recordEntry "tryHead"
+#endif
         match list with
         | x :: _ -> Some x
         | [] -> None
 
     [<CompiledName("Tail")>]
     let tail list =
+#if COLLECTION_TRACE
+        list |> recordEntry "tail"
+#endif
         match list with
         | _ :: t -> t
         | [] -> invalidArg "list" (SR.GetString(SR.inputListWasEmpty))
 
     [<CompiledName("IsEmpty")>]
     let isEmpty list =
+#if COLLECTION_TRACE
+        list |> recordEntry "isEmpty"
+#endif
         match list with
         | [] -> true
         | _ -> false
@@ -175,6 +268,9 @@ module List =
     [<CompiledName("Append")>]
     let append list1 list2 =
         list1 @ list2
+#if COLLECTION_TRACE
+        |> recordEntryReturn "append"
+#endif
 
     [<CompiledName("Item")>]
     let rec item index list =
@@ -203,14 +299,23 @@ module List =
     [<CompiledName("Choose")>]
     let choose chooser list =
         Microsoft.FSharp.Primitives.Basics.List.choose chooser list
+#if COLLECTION_TRACE
+        |> recordEntryReturn "choose"
+#endif
 
     [<CompiledName("SplitAt")>]
     let splitAt index (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "splitAt"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.splitAt index list
 
     [<CompiledName("Take")>]
     let take count (list: 'T list) =
         Microsoft.FSharp.Primitives.Basics.List.take count list
+#if COLLECTION_TRACE
+        |> recordEntryReturn "take"
+#endif
 
     [<CompiledName("TakeWhile")>]
     let takeWhile predicate (list: 'T list) =
@@ -227,6 +332,9 @@ module List =
     [<CompiledName("Initialize")>]
     let init length initializer =
         Microsoft.FSharp.Primitives.Basics.List.init length initializer
+#if COLLECTION_TRACE
+        |> recordEntryReturn "init"
+#endif
 
     [<CompiledName("Replicate")>]
     let replicate count initial =
@@ -273,17 +381,29 @@ module List =
     [<CompiledName("Map3")>]
     let map3 mapping list1 list2 list3 =
         Microsoft.FSharp.Primitives.Basics.List.map3 mapping list1 list2 list3
+#if COLLECTION_TRACE
+        |> recordEntryReturn "map3"
+#endif
 
     [<CompiledName("MapIndexed2")>]
     let mapi2 mapping list1 list2 =
         Microsoft.FSharp.Primitives.Basics.List.mapi2 mapping list1 list2
+#if COLLECTION_TRACE
+        |> recordEntryReturn "mapi2"
+#endif
 
     [<CompiledName("Map2")>]
     let map2 mapping list1 list2 =
         Microsoft.FSharp.Primitives.Basics.List.map2 mapping list1 list2
+#if COLLECTION_TRACE
+        |> recordEntryReturn "map2"
+#endif
 
     [<CompiledName("Fold")>]
     let fold<'T, 'State> folder (state: 'State) (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "fold"
+#endif
         match list with
         | [] -> state
         | _ ->
@@ -298,20 +418,32 @@ module List =
     [<CompiledName("Pairwise")>]
     let pairwise (list: 'T list) =
         Microsoft.FSharp.Primitives.Basics.List.pairwise list
+#if COLLECTION_TRACE
+        |> recordEntryReturn "pairwise"
+#endif
 
     [<CompiledName("Reduce")>]
     let reduce reduction list =
+#if COLLECTION_TRACE
+        list |> recordEntry "reduce"
+#endif
         match list with
         | [] -> invalidArg "list" (SR.GetString(SR.inputListWasEmpty))
         | h :: t -> fold reduction h t
 
     [<CompiledName("Scan")>]
     let scan<'T, 'State> folder (state: 'State) (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "scan"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.scan folder state list
 
     [<CompiledName("Singleton")>]
     let inline singleton value =
         [ value ]
+#if COLLECTION_TRACE
+        |> recordEntryReturn "singleton"
+#endif
 
     [<CompiledName("Fold2")>]
     let fold2<'T1, 'T2, 'State> folder (state: 'State) (list1: 'T1 list) (list2: 'T2 list) =
@@ -337,6 +469,10 @@ module List =
     // this version doesn't causes stack overflow - it uses a private stack
     [<CompiledName("FoldBack")>]
     let foldBack<'T, 'State> folder (list: 'T list) (state: 'State) =
+#if COLLECTION_TRACE
+        list |> recordEntry "foldBack"
+#endif
+
         let f = OptimizedClosures.FSharpFunc<_, _, _>.Adapt (folder)
 
         match list with
@@ -354,6 +490,9 @@ module List =
 
     [<CompiledName("ReduceBack")>]
     let reduceBack reduction list =
+#if COLLECTION_TRACE
+        list |> recordEntry "reduceBack"
+#endif
         match list with
         | [] -> invalidArg "list" (SR.GetString(SR.inputListWasEmpty))
         | _ ->
@@ -448,10 +587,16 @@ module List =
 
     [<CompiledName("Exists")>]
     let exists predicate list =
+#if COLLECTION_TRACE
+        list |> recordEntry "exists"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.exists predicate list
 
     [<CompiledName("Contains")>]
     let inline contains value source =
+#if COLLECTION_TRACE
+        source |> recordEntry "contains"
+#endif
         let rec contains e xs1 =
             match xs1 with
             | [] -> false
@@ -523,6 +668,9 @@ module List =
 
     [<CompiledName("Filter")>]
     let filter predicate list =
+#if COLLECTION_TRACE
+        list |> recordEntry "filter"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.filter predicate list
 
     [<CompiledName("Except")>]
@@ -561,6 +709,9 @@ module List =
 
     [<CompiledName("GroupBy")>]
     let groupBy (projection: 'T -> 'Key) (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "groupBy"
+#endif
         match list with
         | [] -> []
         | _ ->
@@ -571,14 +722,23 @@ module List =
 
     [<CompiledName("Partition")>]
     let partition predicate list =
+#if COLLECTION_TRACE
+        list |> recordEntry "partition"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.partition predicate list
 
     [<CompiledName("Unzip")>]
     let unzip list =
+#if COLLECTION_TRACE
+        list |> recordEntry "unzip"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.unzip list
 
     [<CompiledName("Unzip3")>]
     let unzip3 list =
+#if COLLECTION_TRACE
+        list |> recordEntry "unzip3"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.unzip3 list
 
     [<CompiledName("Windowed")>]
@@ -587,6 +747,9 @@ module List =
 
     [<CompiledName("ChunkBySize")>]
     let chunkBySize chunkSize list =
+#if COLLECTION_TRACE
+        list |> recordEntry "chunkBySize"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.chunkBySize chunkSize list
 
     [<CompiledName("SplitInto")>]
@@ -596,13 +759,22 @@ module List =
     [<CompiledName("Zip")>]
     let zip list1 list2 =
         Microsoft.FSharp.Primitives.Basics.List.zip list1 list2
+#if COLLECTION_TRACE
+        |> recordEntryReturn "zip"
+#endif
 
     [<CompiledName("Zip3")>]
     let zip3 list1 list2 list3 =
         Microsoft.FSharp.Primitives.Basics.List.zip3 list1 list2 list3
+#if COLLECTION_TRACE
+        |> recordEntryReturn "zip3"
+#endif
 
     [<CompiledName("Skip")>]
     let skip count list =
+#if COLLECTION_TRACE
+        list |> recordEntry "skip"
+#endif
         if count <= 0 then
             list
         else
@@ -622,6 +794,9 @@ module List =
 
     [<CompiledName("SortWith")>]
     let sortWith comparer list =
+#if COLLECTION_TRACE
+        list |> recordEntry "sortWith"
+#endif
         match list with
         | []
         | [ _ ] -> list
@@ -632,6 +807,9 @@ module List =
 
     [<CompiledName("SortBy")>]
     let sortBy projection list =
+#if COLLECTION_TRACE
+        list |> recordEntry "sortBy"
+#endif
         match list with
         | []
         | [ _ ] -> list
@@ -642,6 +820,9 @@ module List =
 
     [<CompiledName("Sort")>]
     let sort list =
+#if COLLECTION_TRACE
+        list |> recordEntry "sort"
+#endif
         match list with
         | []
         | [ _ ] -> list
@@ -652,6 +833,9 @@ module List =
 
     [<CompiledName("SortByDescending")>]
     let inline sortByDescending projection list =
+#if COLLECTION_TRACE
+        list |> recordEntry "sortByDescending"
+#endif
         let inline compareDescending a b =
             compare (projection b) (projection a)
 
@@ -659,6 +843,9 @@ module List =
 
     [<CompiledName("SortDescending")>]
     let inline sortDescending list =
+#if COLLECTION_TRACE
+        list |> recordEntry "sortDescending"
+#endif
         let inline compareDescending a b =
             compare b a
 
@@ -667,13 +854,22 @@ module List =
     [<CompiledName("OfSeq")>]
     let ofSeq source =
         Seq.toList source
+#if COLLECTION_TRACE
+        |> recordEntryReturn "ofSeq"
+#endif
 
     [<CompiledName("ToSeq")>]
     let toSeq list =
+#if COLLECTION_TRACE
+        list |> recordEntry "toSeq"
+#endif
         Seq.ofList list
 
     [<CompiledName("FindIndex")>]
     let findIndex predicate list =
+#if COLLECTION_TRACE
+        list |> recordEntry "findIndex"
+#endif
         let rec loop n list =
             match list with
             | [] -> indexNotFound ()
@@ -687,6 +883,9 @@ module List =
 
     [<CompiledName("TryFindIndex")>]
     let tryFindIndex predicate list =
+#if COLLECTION_TRACE
+        list |> recordEntry "tryFindIndex"
+#endif
         let rec loop n list =
             match list with
             | [] -> None
@@ -701,17 +900,26 @@ module List =
     [<CompiledName("FindIndexBack")>]
     let findIndexBack predicate list =
         list
+#if COLLECTION_TRACE
+        |> recordEntryReturn "findIndexBack"
+#endif
         |> toArray
         |> Microsoft.FSharp.Primitives.Basics.Array.findIndexBack predicate
 
     [<CompiledName("TryFindIndexBack")>]
     let tryFindIndexBack predicate list =
         list
+#if COLLECTION_TRACE
+        |> recordEntryReturn "tryFindIndexBack"
+#endif
         |> toArray
         |> Microsoft.FSharp.Primitives.Basics.Array.tryFindIndexBack predicate
 
     [<CompiledName("Sum")>]
     let inline sum (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "sum"
+#endif
         match list with
         | [] -> LanguagePrimitives.GenericZero<'T>
         | t ->
@@ -724,6 +932,9 @@ module List =
 
     [<CompiledName("SumBy")>]
     let inline sumBy ([<InlineIfLambda>] projection: 'T -> 'U) (list: 'T list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "sumBy"
+#endif
         match list with
         | [] -> LanguagePrimitives.GenericZero<'U>
         | t ->
@@ -736,6 +947,9 @@ module List =
 
     [<CompiledName("Max")>]
     let inline max (list: _ list) =
+#if COLLECTION_TRACE
+        list |> recordEntry "max"
+#endif
         match list with
         | [] -> invalidArg "list" LanguagePrimitives.ErrorStrings.InputSequenceEmptyString
         | h :: t ->
@@ -822,6 +1036,9 @@ module List =
 
     [<CompiledName("Collect")>]
     let collect mapping list =
+#if COLLECTION_TRACE
+        list |> recordEntry "collect"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.collect mapping list
 
     [<CompiledName("AllPairs")>]
@@ -868,11 +1085,17 @@ module List =
 
     [<CompiledName("Truncate")>]
     let truncate count list =
+#if COLLECTION_TRACE
+        list |> recordEntry "truncate"
+#endif
         Microsoft.FSharp.Primitives.Basics.List.truncate count list
 
     [<CompiledName("Unfold")>]
     let unfold<'T, 'State> (generator: 'State -> ('T * 'State) option) (state: 'State) =
         Microsoft.FSharp.Primitives.Basics.List.unfold generator state
+#if COLLECTION_TRACE
+        |> recordEntryReturn "unfold"
+#endif
 
     [<CompiledName("RemoveAt")>]
     let removeAt (index: int) (source: 'T list) : 'T list =

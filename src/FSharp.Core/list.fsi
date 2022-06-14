@@ -16,6 +16,9 @@ open Microsoft.FSharp.Collections
 [<RequireQualifiedAccess>]
 module List = 
 
+    val recordEntry: string -> 'a list -> unit
+    val recordEntryReturn: string -> 'a list -> 'a list
+    
     /// <summary>Returns a new list that contains all pairings of elements from two lists.</summary>
     ///
     /// <param name="list1">The first input list.</param>
