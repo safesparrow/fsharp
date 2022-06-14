@@ -3,6 +3,7 @@
 namespace Microsoft.FSharp.Collections
 
 open System
+open System.Collections.Concurrent
 open Microsoft.FSharp.Core
 open Microsoft.FSharp.Core.Operators
 open Microsoft.FSharp.Core.LanguagePrimitives
@@ -11,38 +12,43 @@ open Microsoft.FSharp.Collections
 open Microsoft.FSharp.Core.CompilerServices
 open System.Collections.Generic
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 [<RequireQualifiedAccess>]
-module List =
+module CollectionTracing =
     
     [<StructuralEquality; StructuralComparison>]
     [<RequireQualifiedAccess>]
     type CollectionType = | List | Array
-    
+      
     [<StructuralEquality; StructuralComparison>]
-    type Key =
+    type Entry =
         {
             CollectionType : CollectionType
             Type : string
             Function : string
+            Length : int
         }
-        
-    let calls = Dictionary<Key, obj>()
+      
+    let calls = List<Entry>()
+    
+    let private l = obj()
+    
+    let recordGeneric (entry : Entry) =
+        lock l (fun _ -> calls.Add(entry))
 
-    let recordGeneric (key : Key) (value : 'a) =
-        if calls.ContainsKey key then
-            (calls[key] :?> List<'a>).Add(value)
-        else calls[key] <- List({value})
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+[<RequireQualifiedAccess>]
+module List =
+    
     
 #if COLLECTION_TRACE
     let recordEntry<'a> (functionName : string) (list : 'a list) =
-        let key = {
-            CollectionType = CollectionType.List
-            Type = typeof<'a>.ToString()
-            Function = functionName
+        let entry = {
+            CollectionTracing.CollectionType = CollectionTracing.CollectionType.List
+            CollectionTracing.Type = typeof<'a>.ToString()
+            CollectionTracing.Function = functionName
+            CollectionTracing.Length = list.Length
         }
-        let value = list.Length
-        recordGeneric key value
+        CollectionTracing.recordGeneric entry
     
     let recordEntryReturn<'a> (functionName : string) (list : 'a list) =
         recordEntry functionName list

@@ -84,6 +84,14 @@ module X =
     [<Explicit>]
     let FantomasEasy () =
         go "Parse.fs.2022-06-04_004240.json"
+        let calls = Microsoft.FSharp.Collections.CollectionTracing.calls
+        let rows = 
+            calls
+            |> Seq.groupBy (fun e -> e.Function)
+            |> Seq.map (fun (f, entries) -> f, entries |> Seq.toArray |> Array.length)
+            |> Seq.toArray
+        printfn $"+%A{rows}"
+        ()
 
     
     [<Test>]
