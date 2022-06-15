@@ -9,10 +9,12 @@
     <ItemGroup>
         <Compile Include="Serializing.fs" />
         <Compile Include="UnitTest1.fs" />
+        <Compile Include="library.fs" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="JetBrains.dotMemoryUnit" Version="3.1.20200127.214830" />
+        <PackageReference Include="Microsoft.Build" Version="17.2.0" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
         <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
         <PackageReference Include="NUnit" Version="3.13.3" />
