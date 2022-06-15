@@ -1,8 +1,10 @@
 namespace FCSTest
 
 open System
+open System.Collections.Generic
 open System.Diagnostics
 open System.IO
+open FCSTest.Serializing
 open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.Text
 open Microsoft.Build.Construction
@@ -117,38 +119,95 @@ module X =
         let json = Newtonsoft.Json.JsonConvert.SerializeObject(replaced, Formatting.Indented)
         File.WriteAllText(path, json)
         
-    let parallelise (o : )
+    let parallelise (o : ParseArgs) : Dictionary<int64, FSharpProjectOptions * int64[]> =
+        let projects = Dictionary<int64, FSharpProjectOptions * int64[]>()
+        let rec traverse (p : FSharpProjectOptions) =
+            match p.Stamp with
+            | None -> failwith "NO STAMP"
+            | Some s ->
+                match projects.TryGetValue s with
+                | true, _ -> ()
+                | false, _ ->
+                    let deps = p.ReferencedProjects |> Array.map (fun r -> r.Options.Value.Stamp.Value)
+                    projects[s] <- p, deps
+                    p.ReferencedProjects
+                    |> Array.iter (fun r -> traverse r.Options.Value)
+        traverse o.options
+        projects
+    
+    let goSmart (args : ParseArgs) =
+        let map = parallelise args
         
-    let go (name : string) =
+        let q = Queue<int64>()
+        
+        let deps =
+            map
+            |> Seq.map (fun (KeyValue(s, (p,d))) -> s, d |> System.Linq.Enumerable.ToHashSet)
+            |> dict
+            
+        deps
+        |> Seq.filter (fun (KeyValue(s,deps)) -> deps.Count = 0)
+        |> Seq.iter (fun (KeyValue(s, _)) -> q.Enqueue s)
+        
+        let createArgs (p : FSharpProjectOptions) =
+            let sourcePath = p.SourceFiles |> Array.last
+            let source = File.ReadAllText sourcePath
+            {
+                fileName = sourcePath
+                fileVersion = Convert.ToInt32(p.Stamp.Value)
+                sourceText = SourceText.ofString source
+                ParseArgs.options = p
+            }
+        
         let sw = Stopwatch.StartNew()
+        while q.Count > 0 do
+            let s = q.Dequeue()
+            let p, _ = map[s]
+            let args = createArgs p
+            parseAndCheckFileInProject args |> Async.RunSynchronously |> ignore
+            printfn $"{sw.ElapsedMilliseconds}ms - Checked {p.ProjectFileName}"
+            // remove s from all projects' deps
+            deps
+            |> Seq.iter (fun (KeyValue(s2, deps2)) ->
+                let p2, _ = map[s2]
+                if deps2.Remove s && deps2.Count = 0 then
+                    q.Enqueue s2
+                    printfn $"Enqueue {p2.ProjectFileName}"
+            )
+        
+    let fetchArgs (name : string) =
         let path = "d:/projekty/fsharp/FCSTest/dumps/" + name
         convertJsonFile path
         let argsJson = File.ReadAllText(path)
-        let args = deserialize dirs argsJson
-        let args = {args with sourceText = modifyText args.sourceText}
+        deserialize dirs argsJson
+        
+    let go (args : ParseArgs) =
+        let sw = Stopwatch.StartNew()
         let x = parseAndCheckFileInProject args
         let y = x |> Async.RunSynchronously
-        System.Console.WriteLine (sw.Elapsed)
+        Console.WriteLine (sw.Elapsed)
         ()
         
-    let goMulti (names : string[]) =
+    let goMulti (args : ParseArgs[]) =
         System.Console.WriteLine ($"start - - {System.GC.GetTotalAllocatedBytes()/1024L/1024L}MB allocated so far")
-        names
-        |> Array.iter (fun name ->
-            let argsJson = File.ReadAllText("d:/projekty/fsharp/FCSTest/dumps/" + name)
+        args
+        |> Array.iter (fun args ->
             let sw = Stopwatch.StartNew()
-            let args = deserialize dirs argsJson
-            let args = {args with sourceText = modifyText args.sourceText}
-            let x = parseAndCheckFileInProject args
-            let y = x |> Async.RunSynchronously
-            System.Console.WriteLine ($"{name} - {sw.Elapsed} - {System.GC.GetTotalAllocatedBytes()/1024L/1024L}MB allocated so far")
+            let x = parseAndCheckFileInProject args |> Async.RunSynchronously
+            Console.WriteLine ($"{args.fileName} - {sw.Elapsed} - {GC.GetTotalAllocatedBytes()/1024L/1024L}MB allocated so far")
         )
         
-    [<Test>]
+    [<TestCase("TwoProjects", "Program.fs.2022-06-04_003526.json")>]
+    [<TestCase("FantomasTopFile", "DaemonTests.fs.2022-06-04_004541.json")>]
+    [<TestCase("FantomasFirstFile", "Parse.fs.2022-06-04_004240.json")>]
+    [<TestCase("root_7leaves", "root_7leaves_library.fs.2022-06-15_222554.json")>]
+    [<TestCase("root_20leaves", "root_20leaves_library.fs.2022-06-15_220456.json")>]
     [<Explicit>]
-    let TwoProjects () =
-        go "Program.fs.2022-06-04_003526.json"
-        
+    let GoSmart (name : string, file : string) =
+        file
+        |> fetchArgs
+        |> goSmart
+        ()
         
     [<TestCase("TwoProjects", "Program.fs.2022-06-04_003526.json")>]
     [<TestCase("FantomasTopFile", "DaemonTests.fs.2022-06-04_004541.json")>]
@@ -157,7 +216,10 @@ module X =
     [<TestCase("root_20leaves", "root_20leaves_library.fs.2022-06-15_220456.json")>]
     [<Explicit>]
     let GoAny (name : string, file : string) =
-        go file
+        file
+        |> fetchArgs
+        |> go
+        ()
         
     // [<Test>]
     // [<Explicit>]
@@ -172,26 +234,12 @@ module X =
     //     printfn $"+%A{rows}"
     //     ()
 
-    
-    [<Test>]
-    [<Explicit>]
-    let FantomasHard () =
-        go "DaemonTests.fs.2022-06-04_004541.json"
-    
     [<Test>]
     [<Explicit>]
     let FantomasHardMulti () =
-        goMulti [|
+        [|
             "1_Program.fs.2022-06-11_012033.json"
             "2_DaemonTests.fs.2022-06-11_012110.json"
         |]
-        
-    [<Test>]
-    [<Explicit>]
-    let Tester() =
-        [|1; 2; 3; 4; 5; 6|]
-        |> Array.map (fun x -> x*x)
-        |> Array.filter (fun x -> x % 2 = 0)
-        |> Array.collect (fun x -> [|x; x+1|])
-        |> Array.sum
-        |> ignore
+        |> Array.map fetchArgs
+        |> goMulti

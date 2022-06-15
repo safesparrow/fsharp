@@ -121,6 +121,11 @@ type FSharpReferencedProject =
         | PEReference(projectOutputFile=projectOutputFile)
         | ILModuleReference(projectOutputFile=projectOutputFile) -> projectOutputFile
 
+    member this.Options =
+        match this with
+        | FSharpReference(options=options) -> Some options
+        | _ -> None
+    
     static member CreateFSharp(projectOutputFile, options) =
         FSharpReference(projectOutputFile, options)
 
