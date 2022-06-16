@@ -106,8 +106,6 @@ and [<NoComparison; CustomEquality>] public FSharpReferencedProject =
     /// reference in the project options for this referenced project.
     /// </summary>
     member OutputFile: string
-    
-    member Options: FSharpProjectOptions option
 
     /// <summary>
     /// Creates a reference for an F# project. The physical data for it is stored/cached inside of the compiler service.
