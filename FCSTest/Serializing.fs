@@ -1,9 +1,11 @@
 namespace FCSTest
 
 open System
+open System.IO
 open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.Text
 open Microsoft.FSharp.Reflection
+open Newtonsoft.Json
 
 module Serializing =
     
@@ -51,18 +53,19 @@ module Serializing =
                     To = x.From
                 }
     
-    type Dirs = {
+    /// <summary>Directories used when generating the inputs, used to anonymize them</summary>
+    type TestDirs = {
         NugetPackages : string
         CodeRoot : string
     }
     
-    module Dirs =
-        let toPlaceholders (d : Dirs) =
+    module TestDirs =
+        let toPlaceholders (d : TestDirs) =
             [|
                 {From = d.CodeRoot; To = "%CODE_ROOT%"}
                 {From = d.NugetPackages; To = "%NUGET_PACKAGES%"}
             |]
-        let fromPlaceholders (d : Dirs) =
+        let fromPlaceholders (d : TestDirs) =
             toPlaceholders d
             |> Array.map (fun x -> x.Reverse())
     
@@ -89,8 +92,8 @@ module Serializing =
                     )
         }
         
-    let replacePlaceholderPaths (d : Dirs) (a : FakeParseArgs) : FakeParseArgs =
-        let pairs = Dirs.fromPlaceholders d
+    let replacePlaceholderPaths (d : TestDirs) (a : FakeParseArgs) : FakeParseArgs =
+        let pairs = TestDirs.fromPlaceholders d
         {
             a with
                 options = a.options |> replacePaths pairs
@@ -117,7 +120,7 @@ module Serializing =
             Stamp = o.Stamp
         }
         
-    let convertBackAndMap (d : Dirs) (a : FakeParseArgs) : ParseArgs =
+    let convertBackAndMap (d : TestDirs) (a : FakeParseArgs) : ParseArgs =
         let a = replacePlaceholderPaths d a
         {
             ParseArgs.options = convertBackOptions a.options
@@ -156,9 +159,9 @@ module Serializing =
             Stamp = o.Stamp
         }
         
-    let convertAndMap (d : Dirs) (o : FSharpProjectOptions) : FakeOptions =
+    let convertAndMap (d : TestDirs) (o : FSharpProjectOptions) : FakeOptions =
         let o = convert o
-        let pairs = Dirs.toPlaceholders d
+        let pairs = TestDirs.toPlaceholders d
         replacePaths pairs o
     
     let replaceArgs (p : PrefixSwapPair[]) (a : FakeParseArgs) =
@@ -168,11 +171,11 @@ module Serializing =
                 options = replacePaths p a.options
         }
         
-    let deserialize (d : Dirs) (json : string) : ParseArgs =
-        let fake = Newtonsoft.Json.JsonConvert.DeserializeObject<FakeParseArgs> json
+    let deserialize (d : TestDirs) (json : string) : ParseArgs =
+        let fake = JsonConvert.DeserializeObject<FakeParseArgs> json
         convertBackAndMap d fake
     
-    let serialize (d : Dirs) (a : ParseArgs) : string =
+    let serialize (d : TestDirs) (a : ParseArgs) : string =
         let options = convertAndMap d a.options
         let fake : FakeParseArgs = {
             FakeParseArgs.fileName = a.fileName
@@ -180,4 +183,13 @@ module Serializing =
             options = options
             sourceText = a.sourceText.GetSubTextString(0, a.sourceText.Length)
         }
-        Newtonsoft.Json.JsonConvert.SerializeObject(fake, Newtonsoft.Json.Formatting.Indented)
+        JsonConvert.SerializeObject(fake, Formatting.Indented)
+
+    
+    let anonymizeArgsFile (dirs : TestDirs) (path : string) =
+        let json = File.ReadAllText(path)
+        let fake = JsonConvert.DeserializeObject<FakeParseArgs> json
+        let replaced = replaceArgs (dirs |> TestDirs.toPlaceholders) fake
+        let json = JsonConvert.SerializeObject(replaced, Formatting.Indented)
+        File.WriteAllText(path, json)
+        

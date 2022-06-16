@@ -8,8 +8,17 @@
 
     <ItemGroup>
         <Compile Include="Serializing.fs" />
-        <Compile Include="UnitTest1.fs" />
-        <Compile Include="library.fs" />
+        <Compile Include="SolutionGeneration.fs" />
+        <Compile Include="AnalysisAdhocTests.fs" />
+        <Content Include="dumps\Fantomas_LeafProject_Parse.fs.json">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="dumps\Fantomas_TopProject_DaemonTests.fs.json">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="dumps\TwoProjects_Program.fs.json">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
     <ItemGroup>
