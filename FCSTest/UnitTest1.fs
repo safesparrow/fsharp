@@ -1,12 +1,9 @@
 namespace FCSTest
 
 open System
-open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Diagnostics
 open System.IO
-open System.Threading
-open System.Threading.Tasks
 open FCSTest.Serializing
 open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.Text
@@ -90,25 +87,21 @@ module X =
     let Setup () =
         checker <- 
             FSharpChecker.Create(projectCacheSize = 200,
-                                 keepAllBackgroundResolutions = true,
-                                 keepAllBackgroundSymbolUses = true,
-                                 enablePartialTypeChecking = true)
+                                 keepAllBackgroundResolutions = false,
+                                 keepAllBackgroundSymbolUses = false,
+                                 enablePartialTypeChecking = false)
             |> Some
     let converter = Newtonsoft.Json.Converters.DiscriminatedUnionConverter()
         
 
     let parseAndCheckFileInProject (args : ParseArgs) =
-        async {
-            let sw = Stopwatch.StartNew()
-            let! _ = checker.Value.ParseAndCheckFileInProject(
-                args.fileName,
-                args.fileVersion,
-                args.sourceText,
-                args.options,
-                ""
-            )
-            printfn $"Check {args.fileName} took {sw.ElapsedMilliseconds}ms"
-        }
+        checker.Value.ParseAndCheckFileInProject(
+            args.fileName,
+            args.fileVersion,
+            args.sourceText,
+            args.options,
+            ""
+        )
         
     let r = new Random()
     let modifyText (text : ISourceText) =
@@ -145,13 +138,16 @@ module X =
     let goSmart (args : ParseArgs) =
         let map = parallelise args
         
+        let q = Queue<int64>()
         
         let deps =
             map
             |> Seq.map (fun (KeyValue(s, (p,d))) -> s, d |> System.Linq.Enumerable.ToHashSet)
             |> dict
             
-        let q = ConcurrentQueue<int64>()
+        deps
+        |> Seq.filter (fun (KeyValue(s,deps)) -> deps.Count = 0)
+        |> Seq.iter (fun (KeyValue(s, _)) -> q.Enqueue s)
         
         let createArgs (p : FSharpProjectOptions) =
             let sourcePath = p.SourceFiles |> Array.last
@@ -163,58 +159,21 @@ module X =
                 ParseArgs.options = p
             }
         
-        deps
-        |> Seq.filter (fun (KeyValue(s,deps)) -> deps.Count = 0)
-        |> Seq.iter (fun (KeyValue(s, _)) -> q.Enqueue s)
-        
         let sw = Stopwatch.StartNew()
-        let finished = HashSet<int64>()
-        let tasks = List<Task>()
-        
-        let mutable doneProjects = 0
-        
-        let doThis (s : int64) =
-            let mutable fine = false
-            lock finished (fun () ->
-                fine <- finished.Add s
+        while q.Count > 0 do
+            let s = q.Dequeue()
+            let p, _ = map[s]
+            let args = createArgs p
+            parseAndCheckFileInProject args |> Async.RunSynchronously |> ignore
+            printfn $"{sw.ElapsedMilliseconds}ms - Checked {p.ProjectFileName}"
+            // remove s from all projects' deps
+            deps
+            |> Seq.iter (fun (KeyValue(s2, deps2)) ->
+                let p2, _ = map[s2]
+                if deps2.Remove s && deps2.Count = 0 then
+                    q.Enqueue s2
+                    printfn $"Enqueue {p2.ProjectFileName}"
             )
-            match fine, (map[s] |> fst).ProjectFileName.Contains("root")  with
-            | false, _ -> ()
-            | _, true -> ()
-            | true, false ->
-                let p, _ = map[s]
-                let args = createArgs p
-                async {
-                    do! (parseAndCheckFileInProject args)
-                    
-                    lock finished (fun () ->
-                        printfn $"{sw.ElapsedMilliseconds}ms - Checked {p.ProjectFileName}"
-                        // remove s from all projects' deps
-                        deps
-                        |> Seq.iter (fun (KeyValue(s2, deps2)) ->
-                            let p2, _ = map[s2]
-                            if deps2.Remove s && deps2.Count = 0 then
-                                q.Enqueue s2
-                                printfn $"Enqueue {p2.ProjectFileName}"
-                        )
-                    )
-                    doneProjects <- doneProjects+1
-                }
-                |> Async.StartAsTask
-                |> ignore
-        
-        while doneProjects < map.Count - 1 do
-            while q.Count > 0 do
-                match q.TryDequeue() with
-                | false, _ -> ()
-                | true, s -> doThis s
-            Thread.Sleep 10
-            
-        printfn $"Final projects scheduled - awaiting all ({tasks.Count}) tasks"
-        Task.WaitAll (tasks.ToArray())
-        
-        parseAndCheckFileInProject args |> Async.RunSynchronously
-        ()
         
     let fetchArgs (name : string) =
         let path = "d:/projekty/fsharp/FCSTest/dumps/" + name
