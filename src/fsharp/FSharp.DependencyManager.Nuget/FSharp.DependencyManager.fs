@@ -179,7 +179,7 @@ type FSharpDependencyManager (outputDirectory:string option) =
 
     let generatedScripts = ConcurrentDictionary<string,string>()
 
-    let workingDirectory =
+    let getWorkingDirectory () =
         // Calculate the working directory for dependency management
         //   if a path wasn't supplied to the dependency manager then use the temporary directory as the root
         //   if a path was supplied if it was rooted then use the rooted path as the root
@@ -234,7 +234,7 @@ type FSharpDependencyManager (outputDirectory:string option) =
 
         let packageReferenceText = String.Join(Environment.NewLine, packageReferenceLines)
 
-        let projectPath = Path.Combine(workingDirectory.Value, "Project.fsproj")
+        let projectPath = Path.Combine(getWorkingDirectory().Value, "Project.fsproj")
 
         let generateAndBuildProjectArtifacts =
             let writeFile path body =
@@ -276,7 +276,7 @@ type FSharpDependencyManager (outputDirectory:string option) =
             | _ -> "#r @\""
 
         let generateAndBuildProjectArtifacts =
-            let configIncludes = generateSourcesFromNugetConfigs scriptDirectory workingDirectory.Value timeout
+            let configIncludes = generateSourcesFromNugetConfigs scriptDirectory (getWorkingDirectory().Value) timeout
             let directiveLines = Seq.append packageManagerTextLines configIncludes
             let resolutionResult = prepareDependencyResolutionFiles (scriptExt, directiveLines, targetFrameworkMoniker, runtimeIdentifier, timeout)
             match resolutionResult.resolutionsFile with
