@@ -6,19 +6,15 @@ open System.IO
 open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.Text
 open Microsoft.Build.Evaluation
-open NUnit.Framework
 open Serializing
 
-[<TestFixture; Explicit>]
 module AnalysisAdhocTests =
     
-    [<Test>]
     let GenerateSampleSolution () =
         SolutionGenerator.generate "d:/projekty/fsharp/FCSTest/solution" 7
     
     let mutable checker : FSharpChecker option = None
 
-    [<SetUp>]
     let Setup () =
         checker <- 
             FSharpChecker.Create(projectCacheSize = 200,
@@ -71,16 +67,22 @@ module AnalysisAdhocTests =
         CodeRoot = "D:\\projekty\\fantomas"
     }
     
-    [<TestCase("TwoProjects_Program.fs.json")>]
-    [<TestCase("Fantomas_TopProject_DaemonTests.fs.json")>]
-    [<TestCase("Fantomas_LeafProject_Parse.fs.json")>]
-    [<Explicit>]
-    let runAnalysis (file : string) =
-        doRunAnalysis dirs $"dumps/{file}"
+    let examples = [
+        "TwoProjects_Program.fs.json"
+        "Fantomas_TopProject_DaemonTests.fs.json"
+        "Fantomas_LeafProject_Parse.fs.json"
+    ]
     
-    [<TestCase("TwoProjects_Program.fs.json")>]
-    [<TestCase("Fantomas_TopProject_DaemonTests.fs.json")>]
-    [<TestCase("Fantomas_LeafProject_Parse.fs.json")>]
-    [<Explicit>]
-    let runAnalysisMulti (file : string) =
-        doRunAnalysisMulti dirs $"dumps/{file}" 10
+    [<EntryPoint>]
+    let rec main args =
+        match args with
+        | [||] ->
+            let x = Console.ReadLine()
+            main [|x|]
+        | [|x|] ->
+             match Int32.TryParse x with
+             | true, i when i>=0 && i<3 -> doRunAnalysis dirs $"dumps/{examples[i]}"
+             | true, _ -> failwith "Invalid args"
+             | _ -> doRunAnalysis dirs x
+             0
+        | _ -> failwith "invalid args"
