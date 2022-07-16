@@ -56,7 +56,8 @@ module List =
 #endif
 
     let inline checkNonNull argName arg =
-        if isNull arg then nullArg argName
+        if isNull arg then
+            nullArg argName
 
     let inline indexNotFound () =
         raise (KeyNotFoundException(SR.GetString(SR.keyNotFoundAlt)))
@@ -962,7 +963,8 @@ module List =
             let mutable acc = h
 
             for x in t do
-                if x > acc then acc <- x
+                if x > acc then
+                    acc <- x
 
             acc
 
@@ -991,7 +993,8 @@ module List =
             let mutable acc = h
 
             for x in t do
-                if x < acc then acc <- x
+                if x < acc then
+                    acc <- x
 
             acc
 
@@ -1139,7 +1142,9 @@ module List =
             match curr with
             | [] -> invalidArg "index" "index must be within bounds of the list"
             | h :: t ->
-                if i < index then coll.Add(h) //items before index we keep
+                if i < index then
+                    coll.Add(h) //items before index we keep
+
                 curr <- t
 
             i <- i + 1
