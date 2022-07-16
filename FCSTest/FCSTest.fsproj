@@ -6,6 +6,7 @@
         <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
         <OutputType>exe</OutputType>
         <GenerateProgramFile>false</GenerateProgramFile>
+        <EnableDefaultItems>false</EnableDefaultItems>
     </PropertyGroup>
 
     <ItemGroup>

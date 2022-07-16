@@ -44,26 +44,9 @@ module AnalysisAdhocTests =
     let private modifyText (text : ISourceText) =
         SourceText.ofString (text.GetSubTextString(0, text.Length) + $"//{r.Next()}")
         
-    let private doRunAnalysisMulti (dirs : TestDirs) (name : string) (n : int) =
-        let argsJson = File.ReadAllText name
-        let mutable args = deserialize dirs argsJson
-        Console.WriteLine ($"start - {GC.GetTotalAllocatedBytes()/1024L/1024L}MB allocated so far")
-        [|1..n|]
-        |> Array.iter (fun name ->
-            let go (modify : bool) =
-                if modify then args <- {args with sourceText = modifyText args.sourceText}
-                let sw = Stopwatch.StartNew()
-                let result =
-                    parseAndCheckFileInProject args
-                    |> Async.RunSynchronously
-                Console.WriteLine ($"{name} - {sw.Elapsed} - {GC.GetTotalAllocatedBytes()/1024L/1024L}MB allocated so far")
-            go true
-            go false
-        )
-        
     let dirs = {
         NugetPackages = $"C:\\Users\\{Environment.UserName}\\.nuget\\packages"
-        CodeRoot = "D:\\projekty\\fantomas"
+        CodeRoot = "D:\\projekty\\fantomas" // todo customise
     }
     
     let examples = [
