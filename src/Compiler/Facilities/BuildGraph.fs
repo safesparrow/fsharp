@@ -158,7 +158,7 @@ type NodeCode private () =
     
     static member Parallel(degree : int) (computations: NodeCode<'T> seq) =
         let opt =  ParallelOptions()
-        opt.MaxDegreeOfParallelism <- degree //Math.Max(1, int(Math.Round(float Environment.ProcessorCount / 2., 0)))
+        opt.MaxDegreeOfParallelism <- degree
         computations
         |> Seq.map (fun (Node x) -> x)
         |> fun jobs -> (
