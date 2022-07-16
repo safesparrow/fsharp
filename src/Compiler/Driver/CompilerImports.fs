@@ -2141,6 +2141,7 @@ and [<Sealed>] TcImports
         node {
             CheckDisposed()
 
+            let para = Environment.GetEnvironmentVariable("PARALLEL") |> Int32.TryParse |> function | true, p -> p | false, _ -> 1
             let! results =
                 nms
                 |> List.map (fun nm ->
@@ -2151,7 +2152,7 @@ and [<Sealed>] TcImports
                             errorR (Error(FSComp.SR.buildProblemReadingAssembly (nm.resolvedPath, e.Message), nm.originalReference.Range))
                             return None
                     })
-                |> NodeCode.Sequential
+                |> fun a -> if para > 0 then NodeCode.Parallel para a else NodeCode.Sequential a
 
             let dllinfos, phase2s = results |> Array.choose id |> List.ofArray |> List.unzip
             fixupOrphanCcus ()

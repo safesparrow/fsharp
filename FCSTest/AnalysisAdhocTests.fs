@@ -15,13 +15,12 @@ module AnalysisAdhocTests =
     
     let mutable checker : FSharpChecker option = None
 
-    let Setup () =
-        checker <- 
-            FSharpChecker.Create(projectCacheSize = 200,
-                                 keepAllBackgroundResolutions = false,
-                                 keepAllBackgroundSymbolUses = false,
-                                 enablePartialTypeChecking = false)
-            |> Some
+    checker <- 
+        FSharpChecker.Create(projectCacheSize = 200,
+                             keepAllBackgroundResolutions = false,
+                             keepAllBackgroundSymbolUses = false,
+                             enablePartialTypeChecking = false)
+        |> Some
         
     let private parseAndCheckFileInProject (args : ParseArgs) =
         checker.Value.ParseAndCheckFileInProject(
@@ -71,6 +70,7 @@ module AnalysisAdhocTests =
         "TwoProjects_Program.fs.json"
         "Fantomas_TopProject_DaemonTests.fs.json"
         "Fantomas_LeafProject_Parse.fs.json"
+        "50leaves.json"
     ]
     
     [<EntryPoint>]
@@ -81,7 +81,7 @@ module AnalysisAdhocTests =
             main [|x|]
         | [|x|] ->
              match Int32.TryParse x with
-             | true, i when i>=0 && i<3 -> doRunAnalysis dirs $"dumps/{examples[i]}"
+             | true, i when i>=0 && i<examples.Length -> doRunAnalysis dirs $"dumps/{examples[i]}"
              | true, _ -> failwith "Invalid args"
              | _ -> doRunAnalysis dirs x
              0

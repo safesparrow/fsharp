@@ -64,6 +64,8 @@ type NodeCode =
     static member CancellationToken: NodeCode<CancellationToken>
 
     static member Sequential: computations: NodeCode<'T> seq -> NodeCode<'T[]>
+    
+    static member Parallel: degree : int -> computations: (NodeCode<'T> seq) -> NodeCode<'T[]>
 
     /// Execute the cancellable computation synchronously using the ambient cancellation token of
     /// the NodeCode.

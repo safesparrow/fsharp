@@ -250,6 +250,8 @@ type BackgroundCompiler(
     let CreateOneIncrementalBuilder (options:FSharpProjectOptions, userOpName) = 
       node {
         Trace.TraceInformation("FCS: {0}.{1} ({2})", userOpName, "CreateOneIncrementalBuilder", options.ProjectFileName)
+        let t = DateTime.Now.ToString("mm:ss.fff")
+        printfn $"{t} {userOpName}.CreateOneIncrementalBuilder({options.ProjectFileName})"
         let projectReferences =  
             [ for r in options.ReferencedProjects do
 
@@ -264,6 +266,8 @@ type BackgroundCompiler(
                             member x.EvaluateRawContents() = 
                               node {
                                 Trace.TraceInformation("FCS: {0}.{1} ({2})", userOpName, "GetAssemblyData", nm)
+                                let t = DateTime.Now.ToString("mm:ss.fff")
+                                printfn $"{t} {userOpName}.{options.ProjectFileName}.return! GetAssemblyData({opts.ProjectFileName})"
                                 return! self.GetAssemblyData(opts, userOpName + ".CheckReferencedProject("+nm+")")
                               }
                             member x.TryGetLogicalTimeStamp(cache) = 
@@ -343,6 +347,8 @@ type BackgroundCompiler(
             builder.FileChecked.Add (fun file -> fileChecked.Trigger(file, options))
             builder.ProjectChecked.Add (fun () -> projectChecked.Trigger options)
 
+        let t = DateTime.Now.ToString("mm:ss.fff")
+        printfn $"{t} {options.ProjectFileName}.after CreateOneIncrementalBuilder({options.ProjectFileName})"
         return (builderOpt, diagnostics)
       }
 
@@ -414,6 +420,8 @@ type BackgroundCompiler(
         match tryGetBuilder options with
         | Some getBuilder -> 
             node {
+                let t = DateTime.Now.ToString("mm:ss.fff")
+                printfn $"{t} {userOpName}.{options.ProjectFileName}.getOrCreateBuilder({options.ProjectFileName})"
                 match! getBuilder with
                 | builderOpt, creationDiags when builderOpt.IsNone || not builderOpt.Value.IsReferencesInvalidated -> 
                     Logger.Log LogCompilerFunctionId.Service_IncrementalBuildersCache_GettingCache
@@ -430,7 +438,12 @@ type BackgroundCompiler(
                             checkFileInProjectCache.RemoveAnySimilar(ltok, key)
                         )
                     )
-                    return! createAndGetBuilder (options, userOpName)
+                    let t = DateTime.Now.ToString("mm:ss.fff")
+                    printfn $"{t} {userOpName}.{options.ProjectFileName}.before createAndGetBuidler({options.ProjectFileName})"
+                    let! b = createAndGetBuilder (options, userOpName)
+                    let t = DateTime.Now.ToString("mm:ss.fff")
+                    printfn $"{t} {userOpName}.{options.ProjectFileName}.after createAndGetBuidler({options.ProjectFileName})"
+                    return b
             }
         | _ -> 
             createAndGetBuilder (options, userOpName)
@@ -692,7 +705,11 @@ type BackgroundCompiler(
 
                     return (parseResults, FSharpCheckFileAnswer.Succeeded checkResults)
                 | _ ->
+                    let t = DateTime.Now.ToString("mm:ss.fff")
+                    printfn $"{t} getCheckResultsBeforeFileInProject({options.ProjectFileName})"
                     let! tcPrior = builder.GetCheckResultsBeforeFileInProject fileName
+                    let t = DateTime.Now.ToString("mm:ss.fff")
+                    printfn $"{t} getOrComputeTcInfo({options.ProjectFileName})"
                     let! tcInfo = tcPrior.GetOrComputeTcInfo()
                     // Do the parsing.
                     let parsingOptions = FSharpParsingOptions.FromTcConfig(builder.TcConfig, Array.ofList builder.SourceFiles, options.UseScriptResolutionRules)
@@ -702,7 +719,8 @@ type BackgroundCompiler(
                     let! checkResults = bc.CheckOneFileImpl(parseResults, sourceText, fileName, options, fileVersion, builder, tcPrior, tcInfo, creationDiags)
 
                     Logger.LogBlockMessageStop (fileName + strGuid + "-Successful") LogCompilerFunctionId.Service_ParseAndCheckFileInProject
-
+                    let t = DateTime.Now.ToString("mm:ss.fff")
+                    printfn $"{t} end parseandcheckfileinproject({options.ProjectFileName})"
                     return (parseResults, checkResults)
         }
 
