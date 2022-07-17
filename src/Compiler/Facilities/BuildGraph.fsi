@@ -65,7 +65,7 @@ type NodeCode =
 
     static member Sequential: computations: NodeCode<'T> seq -> NodeCode<'T[]>
     
-    static member Parallel: degree : int -> asyn : bool -> computations: (NodeCode<'T> seq) -> NodeCode<'T[]>
+    static member Parallel: computations: (NodeCode<'T> seq) -> NodeCode<'T[]>
 
     /// Execute the cancellable computation synchronously using the ambient cancellation token of
     /// the NodeCode.

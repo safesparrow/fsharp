@@ -2152,8 +2152,13 @@ and [<Sealed>] TcImports
         node {
             CheckDisposed()
 
-            let para = Environment.GetEnvironmentVariable("PARALLEL") |> Int32.TryParse |> function | true, p -> p | false, _ -> 1
-            let asyn = Environment.GetEnvironmentVariable("ASYNC") |> bool.TryParse |> function | true, p -> p | false, _ -> false
+            // TODO inject top-down from FSharpChecker
+            let runInParallel =
+                Environment.GetEnvironmentVariable("FCS_PARALLEL_PROJECTS_ANALYSIS")
+                |> bool.TryParse
+                |> function | true, runInParallel -> runInParallel | false, _ -> false
+            let runMethod = if runInParallel then NodeCode.Parallel else NodeCode.Sequential
+
             let! results =
                 nms
                 |> List.map (fun nm ->
@@ -2164,7 +2169,7 @@ and [<Sealed>] TcImports
                             errorR (Error(FSComp.SR.buildProblemReadingAssembly (nm.resolvedPath, e.Message), nm.originalReference.Range))
                             return None
                     })
-                |> fun a -> if para > 0 then NodeCode.Parallel para asyn a else NodeCode.Sequential a
+                |> runMethod
 
             let dllinfos, phase2s = results |> Array.choose id |> List.ofArray |> List.unzip
             fixupOrphanCcus ()
