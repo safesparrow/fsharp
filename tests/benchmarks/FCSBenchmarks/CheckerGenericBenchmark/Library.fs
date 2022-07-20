@@ -29,7 +29,7 @@ module Benchmarking =
 open Benchmarking
 
 let private deserialize (data : byte[]) : BenchmarkInputs =
-    let serializer = FsPickler.CreateBinarySerializer()
+    let serializer = FsPickler.CreateXmlSerializer()
     serializer.DisableSubtypeResolution <- true
     serializer.UnPickle<BenchmarkInputs> data
 
@@ -37,7 +37,8 @@ type FCSBenchmark (config : BenchmarkConfig) =
     let checker = FSharpChecker.Create(projectCacheSize = config.ProjectCacheSize)
         
     let failOnErrors (results : FSharpCheckFileResults) =
-        if results.Diagnostics.Length > 0 then failwithf $"had errors: %A{results.Diagnostics}"
+        ()
+        //if results.Diagnostics.Length > 0 then failwithf $"had errors: %A{results.Diagnostics}"
     
     let performAction (action : BenchmarkAction) =
         let sw = Stopwatch.StartNew()
@@ -76,6 +77,7 @@ let run (inputs : BenchmarkInputs) =
 let main args =
     match args with
     | [|inputFile|] ->
+        File.WriteAllText(inputFile, File.ReadAllText(inputFile).Replace("FSharpOptions.Benchmarking+BenchmarkInputs", "Say+Benchmarking+BenchmarkInputs"))
         let rawData = File.ReadAllBytes(inputFile)
         let inputs = deserialize rawData
         run inputs

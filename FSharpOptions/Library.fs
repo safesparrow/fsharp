@@ -52,8 +52,6 @@ module Utils =
             let msg = $"Process {name} {args} failed: {errors}."
             printfn $"{msg}. Its full output: {o}"
             failwith msg
-        printfn $"Full output: {o}"
-        Console.ReadLine()
 
 [<RequireQualifiedAccess>]
 module Git =
@@ -194,7 +192,7 @@ module Cracker =
             case.Actions
             |> List.map (fun (AnalyseFile(projectRelativeFileName, projectName)) ->
                 let project = options[projectName]
-                let filePath = Path.Combine(project.ProjectFileName, projectRelativeFileName)
+                let filePath = Path.Combine(Path.GetDirectoryName(project.ProjectFileName), projectRelativeFileName)
                 let fileText = File.ReadAllText(filePath)
                 Benchmarking.BenchmarkAction.AnalyseFile(filePath, fileText, project)
             )
@@ -226,11 +224,7 @@ module Cracker =
         
         let workingDir = Path.Combine(__SOURCE_DIRECTORY__, "../tests/benchmarks/FCSBenchmarks/CheckerGenericBenchmark")
         let envVariables = []
-        Utils.runProcess "dotnet" $"--version" workingDir envVariables
-        Utils.runProcess "dotnet" $"restore -v:d CheckerGenericBenchmark.fsproj" workingDir envVariables
-        Utils.runProcess "dotnet" $"build -c Release -v:d CheckerGenericBenchmark.fsproj" workingDir envVariables
-        Utils.runProcess "dotnet" $"run -c Release --project CheckerGenericBenchmark.fsproj {inputsPath}" workingDir envVariables
-        ()        
+        printfn $"cd {workingDir}{Environment.NewLine}dotnet run -c Release --project CheckerGenericBenchmark.fsproj {inputsPath}"
     
     [<EntryPoint>]
     [<MethodImpl(MethodImplOptions.NoInlining)>]
@@ -243,7 +237,9 @@ module Cracker =
             {
                 Codebase = TestCodebase.Local @"D:\projekty\parallel_test"
                 SlnRelative = "top.sln"
-                Actions = []
+                Actions = [
+                    AnalyseFile ("top.fs", "top")
+                ]
             }
         runBenchmark config case
         0
