@@ -52,6 +52,8 @@ module Utils =
             let msg = $"Process {name} {args} failed: {errors}."
             printfn $"{msg}. Its full output: {o}"
             failwith msg
+        printfn $"Full output: {o}"
+        Console.ReadLine()
 
 [<RequireQualifiedAccess>]
 module Git =
@@ -104,7 +106,8 @@ module Cracker =
 
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let init (slnPath : string) =
-        Init.init (DirectoryInfo(Path.GetDirectoryName slnPath)) None
+        let exe = FileInfo(@"D:\projekty\fsharp\.dotnet\dotnet.exe")
+        Init.init (DirectoryInfo(Path.GetDirectoryName slnPath)) (Some exe)
     
     type BenchmarkActionPhase1 =
         | AnalyseFile of fileName : string * projectName : string
@@ -223,7 +226,8 @@ module Cracker =
         
         let workingDir = Path.Combine(__SOURCE_DIRECTORY__, "../tests/benchmarks/FCSBenchmarks/CheckerGenericBenchmark")
         let envVariables = []
-        Utils.runProcess "dotnet" $"restore -c Release -v:d CheckerGenericBenchmark.fsproj" workingDir envVariables
+        Utils.runProcess "dotnet" $"--version" workingDir envVariables
+        Utils.runProcess "dotnet" $"restore -v:d CheckerGenericBenchmark.fsproj" workingDir envVariables
         Utils.runProcess "dotnet" $"build -c Release -v:d CheckerGenericBenchmark.fsproj" workingDir envVariables
         Utils.runProcess "dotnet" $"run -c Release --project CheckerGenericBenchmark.fsproj {inputsPath}" workingDir envVariables
         ()        
