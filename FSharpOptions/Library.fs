@@ -29,31 +29,6 @@ module Benchmarking =
             Config : BenchmarkConfig
         }
     
-    type FCSBenchmark (config : BenchmarkConfig) =
-        let checker = FSharpChecker.Create(projectCacheSize = config.ProjectCacheSize)
-            
-        let failOnErrors (results : FSharpCheckFileResults) =
-            if results.Diagnostics.Length > 0 then failwithf $"had errors: %A{results.Diagnostics}"
-        
-        let performAction (action : BenchmarkAction) =
-            match action with
-            | AnalyseFile (filePath, sourceText, options) ->
-                let result, answer =
-                    checker.ParseAndCheckFileInProject(filePath, 0, SourceText.ofString sourceText, options)
-                    |> Async.RunSynchronously
-                match answer with
-                | FSharpCheckFileAnswer.Aborted -> failwith "checker aborted"
-                | FSharpCheckFileAnswer.Succeeded results ->
-                    failOnErrors results
-                
-        let cleanCaches () =
-            checker.InvalidateAll()
-            checker.ClearLanguageServiceRootCachesAndCollectAndFinalizeAllTransients()
-            
-        member this.Checker = checker
-        member this.PerformAction action = performAction action
-        member this.CleanCaches () = cleanCaches
-
 [<RequireQualifiedAccess>]
 module Utils =
     let runProcess name args workingDir (envVariables : (string * string) list) =
@@ -143,16 +118,16 @@ module Cracker =
     type FullCase =
         {
             Codebase : TestCodebase
-            Sln : string
+            SlnRelative : string
             Actions : BenchmarkActionPhase1 list
         }
     
-    type ConfigPhase1 =
+    type Config =
         {
             CheckoutBaseDir : string
         }
     
-    let prepareCodebase (config : ConfigPhase1) (case : FullCase) =
+    let prepareCodebase (config : Config) (case : FullCase) =
         let codeRoot =
             match case.Codebase with
             | TestCodebase.Git repo ->
@@ -160,7 +135,8 @@ module Cracker =
             | TestCodebase.Local codeRoot ->
                 codeRoot
         
-        Utils.runProcess "dotnet" $"restore {case.Sln}" codeRoot []
+        let sln = Path.Combine(codeRoot, case.SlnRelative)
+        Utils.runProcess "dotnet" $"restore {sln}" codeRoot []
         codeRoot
     
     [<MethodImpl(MethodImplOptions.NoInlining)>]
@@ -185,17 +161,16 @@ module Cracker =
         doLoadOptions toolsPath sln
     
     let private serialize (inputs : Benchmarking.BenchmarkInputs) : byte[] =
-        // let registry = CustomPicklerRegistry()
-        // registry.DeclareSerializable<NonSerializable>()
-        // let cache = PicklerCache.FromCustomPicklerRegistry registry
-        let serializer = FsPickler.CreateBinarySerializer()//picklerResolver = cache)
+        let serializer = FsPickler.CreateBinarySerializer()
         serializer.DisableSubtypeResolution <- true
         let data = serializer.Pickle inputs
+        // test deserialization works
         let r = serializer.UnPickle<Benchmarking.BenchmarkInputs> data
         data
     
-    let generateInputs (config : ConfigPhase1) (case : FullCase) (codeRoot : string) =
-        let options = loadOptions case.Sln
+    let generateInputs (config : Config) (case : FullCase) (codeRoot : string) =
+        let sln = Path.Combine(codeRoot, case.SlnRelative)
+        let options = loadOptions sln
         
         let actions =
             case.Actions
@@ -216,13 +191,13 @@ module Cracker =
             Benchmarking.BenchmarkInputs.Config = config
         }
     
-    let makeInputsPath (config : ConfigPhase1) (codeRoot : string) =
+    let makeInputsPath (config : Config) (codeRoot : string) =
         let artifactsDir = Path.Combine(codeRoot, ".artifacts")
         let dateStr = DateTime.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss")
         let guid = Guid.NewGuid()
         Path.Combine(artifactsDir, $"{dateStr}.{guid}.DO_NOT_SHARE.fcsinputs.bin") 
     
-    let runBenchmark (config : ConfigPhase1) (case : FullCase) =
+    let runBenchmark (config : Config) (case : FullCase) =
         let codeRoot = prepareCodebase config case
         let inputs = generateInputs config case codeRoot
         let serialized = serialize inputs
@@ -230,49 +205,24 @@ module Cracker =
         File.WriteAllBytes(inputsPath, serialized)
         printfn $"Binary inputs saved to {inputsPath}"
         
-        
-        ()
-    
-    [<MethodImpl(MethodImplOptions.NoInlining)>]
-    let rest (msbuild : ToolsPath) (slnPath : string) =
-        let loader = WorkspaceLoader.Create(msbuild, [])
-        let bl = BinaryLogGeneration.Within(DirectoryInfo(Path.GetDirectoryName slnPath))
-        let sln = Ionide.ProjInfo.Sln.Construction.SolutionFile.Parse slnPath
-        let projectPaths =
-            sln.ProjectsInOrder
-            |> Seq.map (fun p -> p.AbsolutePath)
-            |> Seq.toList
-            |> List.filter (fun p -> p.Contains "op.fsproj" = false)
-            |> List.take 1
-        let projects = loader.LoadProjects(projectPaths, [], bl) |> Seq.toList
-        printfn "Projects loaded"
-        
-        // let project = projects |> Array.find (fun p -> p.ProjectFileName.Contains("leaf_0.fsproj"))
-        let optionsDict =
-            projects
-            |> List.map (fun project -> project.ProjectFileName, FCS.mapToFSharpProjectOptions project projects)
-            |> dict
-        
-        let serialize (options : FSharpProjectOptions[]) =
-            // let registry = CustomPicklerRegistry()
-            // registry.DeclareSerializable<NonSerializable>()
-            // let cache = PicklerCache.FromCustomPicklerRegistry registry
-            let serializer = FsPickler.CreateBinarySerializer()//picklerResolver = cache)
-            serializer.DisableSubtypeResolution <- true
-            let data = serializer.Pickle options
-            let r = serializer.UnPickle<FSharpProjectOptions> data
-            ()
-            
-        serialize()
-        
+        let workingDir = Path.Combine(__SOURCE_DIRECTORY__, "../tests/benchmarks/FCSBenchmarks/CheckerGenericBenchmark")
+        let envVariables = []
+        Utils.runProcess "dotnet" $"run -c Release --project CheckerGenericBenchmark.fsproj {inputsPath}" workingDir envVariables
+        ()        
     
     [<EntryPoint>]
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let main args =
-        
-        let slnPath = @"D:\projekty\parallel_test\top.sln"
-    
-        
-        let msbuild = init slnPath
-        rest msbuild slnPath
+        let config =
+            {
+                Config.CheckoutBaseDir = "d:/projekty/CheckerBenchmarks"
+            }
+        let cases =
+            [
+                {
+                    Codebase = TestCodebase.Local "d:/projekty/FSharpShowcase"
+                    SlnRelative = "FSharpShowcase.sln"
+                    Actions = []
+                }
+            ]
         0
