@@ -2,6 +2,7 @@
 
 
 open System
+open System.Collections
 open System.Diagnostics
 open System.IO
 open System.Runtime.CompilerServices
@@ -213,7 +214,7 @@ module Cracker =
         let guid = Guid.NewGuid()
         Path.Combine(artifactsDir, $"{dateStr}.{guid}.DO_NOT_SHARE.fcsinputs.bin") 
     
-    let runBenchmark (config : Config) (case : FullCase) =
+    let runBenchmark (config : Config) (case : FullCase) (doRun : bool) =
         let codeRoot = prepareCodebase config case
         let inputs = generateInputs config case codeRoot
         let serialized = serializeXml inputs
@@ -225,10 +226,37 @@ module Cracker =
         let workingDir = Path.Combine(__SOURCE_DIRECTORY__, "../tests/benchmarks/FCSBenchmarks/CheckerGenericBenchmark")
         let envVariables = []
         printfn $"cd {workingDir}{Environment.NewLine}dotnet run -c Release --project CheckerGenericBenchmark.fsproj {inputsPath}"
+        
+        printfn $"EnvVariables:"
+        for e in Environment.GetEnvironmentVariables() do
+            let e = e :?> DictionaryEntry
+            Console.WriteLine($"{e.Key}:{e.Value}")
+        
+        let varsToRemove =
+            [
+                "MSBuildExtensionsPath"
+                "DOTNET_ROOT"
+                "MSBUILD_EXE_PATH"
+                "DOTNET_HOST_PATH"
+                "MSBuildSDKsPath"
+            ]
+            
+        for v in varsToRemove do
+            Environment.SetEnvironmentVariable(v, "")
+        
+        
+        printfn $"EnvVariables:"
+        for e in Environment.GetEnvironmentVariables() do
+            let e = e :?> DictionaryEntry
+            Console.WriteLine($"{e.Key}:{e.Value}")
+        
+        
+        Utils.runProcess "dotnet" $"run -c Release --project CheckerGenericBenchmark.fsproj {inputsPath}" workingDir envVariables
     
     [<EntryPoint>]
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let main args =
+        let doRun = match args with [|doRun|] -> bool.Parse(doRun) | _ -> true
         let config =
             {
                 Config.CheckoutBaseDir = "d:/projekty/CheckerBenchmarks"
@@ -241,5 +269,5 @@ module Cracker =
                     AnalyseFile ("top.fs", "top")
                 ]
             }
-        runBenchmark config case
+        runBenchmark config case doRun
         0
