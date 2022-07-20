@@ -7,21 +7,26 @@ open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.Text
 open MBrace.FsPickler
 
-type BenchmarkAction =
-    // member bc.ParseAndCheckFileInProject(fileName: string, fileVersion, sourceText: ISourceText, options: FSharpProjectOptions, userOpName) =
-    | AnalyseFile of fileName : string * sourceText : string * options : FSharpProjectOptions
-    
-type BenchmarkConfig =
-    {
-        ProjectCacheSize : int
-    }
-    with static member makeDefault () = {ProjectCacheSize = 200}
 
-type BenchmarkInputs =
-    {
-        Actions : BenchmarkAction list
-        Config : BenchmarkConfig
-    }
+module Benchmarking =
+    type BenchmarkAction =
+        // member bc.ParseAndCheckFileInProject(fileName: string, fileVersion, sourceText: ISourceText, options: FSharpProjectOptions, userOpName) =
+        | AnalyseFile of fileName : string * sourceText : string * options : FSharpProjectOptions
+        
+    type BenchmarkConfig =
+        {
+            ProjectCacheSize : int
+        }
+        with static member makeDefault () = {ProjectCacheSize = 200}
+
+    type BenchmarkInputs =
+        {
+            Actions : BenchmarkAction list
+            Config : BenchmarkConfig
+        }
+
+
+open Benchmarking
 
 let private deserialize (data : byte[]) : BenchmarkInputs =
     let serializer = FsPickler.CreateBinarySerializer()

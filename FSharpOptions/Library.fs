@@ -12,7 +12,6 @@ open Ionide.ProjInfo.Types
 open MBrace.FsPickler
 
 module Benchmarking =
-    
     type BenchmarkAction =
         // member bc.ParseAndCheckFileInProject(fileName: string, fileVersion, sourceText: ISourceText, options: FSharpProjectOptions, userOpName) =
         | AnalyseFile of fileName : string * sourceText : string * options : FSharpProjectOptions
@@ -22,13 +21,13 @@ module Benchmarking =
             ProjectCacheSize : int
         }
         with static member makeDefault () = {ProjectCacheSize = 200}
-    
+
     type BenchmarkInputs =
         {
             Actions : BenchmarkAction list
             Config : BenchmarkConfig
         }
-    
+
 [<RequireQualifiedAccess>]
 module Utils =
     let runProcess name args workingDir (envVariables : (string * string) list) =
@@ -141,13 +140,20 @@ module Cracker =
     
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let doLoadOptions (toolsPath : ToolsPath) (sln : string) =
-        let loader = WorkspaceLoader.Create(toolsPath, [])
+        let props =
+            [
+                "Configuration", "Debug"
+                "TargetPlatform", "x64"
+                "Platform", "x64"
+            ]
+        let loader = WorkspaceLoader.Create(toolsPath, props)
         let bl = BinaryLogGeneration.Within(DirectoryInfo(Path.GetDirectoryName sln))
         let sln = Ionide.ProjInfo.Sln.Construction.SolutionFile.Parse sln
         let projectPaths =
             sln.ProjectsInOrder
             |> Seq.map (fun p -> p.AbsolutePath)
             |> Seq.toList
+        
         let projects = loader.LoadProjects(projectPaths, [], bl) |> Seq.toList
         printfn $"{projects.Length} projects loaded"
         
@@ -162,6 +168,15 @@ module Cracker =
     
     let private serialize (inputs : Benchmarking.BenchmarkInputs) : byte[] =
         let serializer = FsPickler.CreateBinarySerializer()
+        serializer.DisableSubtypeResolution <- true
+        let data = serializer.Pickle inputs
+        // test deserialization works
+        let r = serializer.UnPickle<Benchmarking.BenchmarkInputs> data
+        data
+        
+    
+    let private serializeXml (inputs : Benchmarking.BenchmarkInputs) =
+        let serializer = FsPickler.CreateXmlSerializer()
         serializer.DisableSubtypeResolution <- true
         let data = serializer.Pickle inputs
         // test deserialization works
@@ -200,13 +215,16 @@ module Cracker =
     let runBenchmark (config : Config) (case : FullCase) =
         let codeRoot = prepareCodebase config case
         let inputs = generateInputs config case codeRoot
-        let serialized = serialize inputs
+        let serialized = serializeXml inputs
         let inputsPath = makeInputsPath config codeRoot
+        Directory.CreateDirectory(Path.GetDirectoryName(inputsPath)) |> ignore
         File.WriteAllBytes(inputsPath, serialized)
         printfn $"Binary inputs saved to {inputsPath}"
         
         let workingDir = Path.Combine(__SOURCE_DIRECTORY__, "../tests/benchmarks/FCSBenchmarks/CheckerGenericBenchmark")
         let envVariables = []
+        Utils.runProcess "dotnet" $"restore -c Release -v:d CheckerGenericBenchmark.fsproj" workingDir envVariables
+        Utils.runProcess "dotnet" $"build -c Release -v:d CheckerGenericBenchmark.fsproj" workingDir envVariables
         Utils.runProcess "dotnet" $"run -c Release --project CheckerGenericBenchmark.fsproj {inputsPath}" workingDir envVariables
         ()        
     
@@ -217,12 +235,11 @@ module Cracker =
             {
                 Config.CheckoutBaseDir = "d:/projekty/CheckerBenchmarks"
             }
-        let cases =
-            [
-                {
-                    Codebase = TestCodebase.Local "d:/projekty/FSharpShowcase"
-                    SlnRelative = "FSharpShowcase.sln"
-                    Actions = []
-                }
-            ]
+        let case =
+            {
+                Codebase = TestCodebase.Local @"D:\projekty\parallel_test"
+                SlnRelative = "top.sln"
+                Actions = []
+            }
+        runBenchmark config case
         0
