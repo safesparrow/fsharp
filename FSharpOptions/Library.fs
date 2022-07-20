@@ -12,6 +12,52 @@ open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
 open MBrace.FsPickler
 
+module JSON =
+    
+    type FSharpReferenceJson =
+        {
+            ProjectOutputFile: string
+            Options: FSharpProjectOptionsJson
+        }
+    
+    and FSharpProjectOptionsJson =
+        {
+            ProjectFileName: string
+            ProjectId: string option
+            SourceFiles: string[]
+            OtherOptions: string[]
+            ReferencedProjects: FSharpReferenceJson[]
+            IsIncompleteTypeCheckEnvironment : bool
+            UseScriptResolutionRules : bool
+            LoadTime : DateTime
+            OriginalLoadReferences: (range * string * string) list
+            Stamp : int64 option
+        }
+    
+    let rec convertToJson (o : FSharpProjectOptions) : FSharpProjectOptionsJson =
+        let convertReference (r : FSharpReferencedProject) =
+            match r with
+            | FSharpReferencedProject.FSharpReference(projectOutputFile, projectOptions) ->
+                {
+                    FSharpReferenceJson.ProjectOutputFile = projectOutputFile
+                    Options = projectOptions |> convertToJson
+                }
+            
+        
+        {
+            FSharpProjectOptionsJson.ProjectFileName = o.ProjectFileName
+            ProjectId = o.ProjectId
+            SourceFiles = o.SourceFiles
+            OtherOptions = o.OtherOptions
+            ReferencedProjects = o.ReferencedProjects
+            IsIncompleteTypeCheckEnvironment = o.IsIncompleteTypeCheckEnvironment
+            UseScriptResolutionRules = o.UseScriptResolutionRules
+            LoadTime = o.LoadTime
+            OriginalLoadReferences = o.OriginalLoadReferences
+            Stamp = o.Stamp
+        }
+        
+
 module Benchmarking =
     type BenchmarkAction =
         // member bc.ParseAndCheckFileInProject(fileName: string, fileVersion, sourceText: ISourceText, options: FSharpProjectOptions, userOpName) =
@@ -214,6 +260,21 @@ module Cracker =
         let guid = Guid.NewGuid()
         Path.Combine(artifactsDir, $"{dateStr}.{guid}.DO_NOT_SHARE.fcsinputs.bin") 
     
+    let unsetProjInfoEnvironmentVariables () =
+        // These are the env variables that Ionide.ProjInfo seems to set (in-process).
+        // We need to get rid of them so that the child 'dotnet run' process is using the right tools
+        let varsToRemove =
+            [
+                "MSBuildExtensionsPath"
+                "DOTNET_ROOT"
+                "MSBUILD_EXE_PATH"
+                "DOTNET_HOST_PATH"
+                "MSBuildSDKsPath"
+            ]
+            
+        for v in varsToRemove do
+            Environment.SetEnvironmentVariable(v, "")
+    
     let runBenchmark (config : Config) (case : FullCase) (doRun : bool) =
         let codeRoot = prepareCodebase config case
         let inputs = generateInputs config case codeRoot
@@ -227,29 +288,7 @@ module Cracker =
         let envVariables = []
         printfn $"cd {workingDir}{Environment.NewLine}dotnet run -c Release --project CheckerGenericBenchmark.fsproj {inputsPath}"
         
-        printfn $"EnvVariables:"
-        for e in Environment.GetEnvironmentVariables() do
-            let e = e :?> DictionaryEntry
-            Console.WriteLine($"{e.Key}:{e.Value}")
-        
-        let varsToRemove =
-            [
-                "MSBuildExtensionsPath"
-                "DOTNET_ROOT"
-                "MSBUILD_EXE_PATH"
-                "DOTNET_HOST_PATH"
-                "MSBuildSDKsPath"
-            ]
-            
-        for v in varsToRemove do
-            Environment.SetEnvironmentVariable(v, "")
-        
-        
-        printfn $"EnvVariables:"
-        for e in Environment.GetEnvironmentVariables() do
-            let e = e :?> DictionaryEntry
-            Console.WriteLine($"{e.Key}:{e.Value}")
-        
+        unsetProjInfoEnvironmentVariables()
         
         Utils.runProcess "dotnet" $"run -c Release --project CheckerGenericBenchmark.fsproj {inputsPath}" workingDir envVariables
     
