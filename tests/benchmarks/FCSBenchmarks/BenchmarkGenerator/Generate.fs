@@ -222,8 +222,10 @@ module Generate =
         let projects = loader.LoadSln(sln, [], bl) |> Seq.toList
         printfn $"{projects.Length} projects loaded"
         
-        projects
-        |> List.map (fun project -> Path.GetFileNameWithoutExtension(project.ProjectFileName), FCS.mapToFSharpProjectOptions project projects)
+        let fsOptions =
+            projects
+            |> List.map (fun project -> Path.GetFileNameWithoutExtension(project.ProjectFileName), FCS.mapToFSharpProjectOptions project projects)
+        fsOptions
         |> dict
     
     [<MethodImpl(MethodImplOptions.NoInlining)>]
@@ -232,9 +234,8 @@ module Generate =
         doLoadOptions toolsPath sln
     
     let private serializeInputs (inputs : BenchmarkInputs) : string =
-        inputs
-        |> Serialization.inputsToJson
-        |> JsonConvert.SerializeObject
+        let dto = inputs |> Serialization.inputsToJson
+        dto |> JsonConvert.SerializeObject
     
     let generateInputs (config : Config) (case : BenchmarkCase) (codeRoot : string) =
         let sln = Path.Combine(codeRoot, case.SlnRelative)
@@ -297,23 +298,13 @@ module Generate =
         else
             printfn $"Not running the benchmark as requested"
     
-    let sample =
-        {
-            LocalCodeRoot = @"D:\projekty\parallel_test"
-            Repo = Unchecked.defaultof<RepoSetup.RepoSpec>
-            SlnRelative = "top.sln"
-            CheckActions = [
-                {FileName = "top.fs"; ProjectName = "top"}
-            ]
-        }
-    
     [<EntryPoint>]
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let main args =
         let doRun = match args with [|doRun|] -> bool.Parse(doRun) | _ -> true
         let config =
             {
-                Config.CheckoutBaseDir = "d:/projekty/CheckerBenchmarks"
+                Config.CheckoutBaseDir = "CheckerBenchmarks"
                 Config.BenchmarkPath = Path.Combine(__SOURCE_DIRECTORY__, "../BenchmarkRunner")
             }
         let case =
