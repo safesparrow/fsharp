@@ -3,7 +3,6 @@
         <TargetFramework>net6.0</TargetFramework>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>exe</OutputType>
-        <RootNamespace>BenchmarkGenerator</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="Dto.fs" />
@@ -20,6 +19,8 @@
       <PackageReference Include="Microsoft.Build.Framework" Version="17.2.0" ExcludeAssets="runtime" />
       <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.2.0" ExcludeAssets="runtime" />
       <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.2.0" ExcludeAssets="runtime" />
+      <PackageReference Include="Microsoft.Extensions.Logging" Version="6.0.0" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="6.0.0" />
       <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     </ItemGroup>
 </Project>

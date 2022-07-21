@@ -1,4 +1,4 @@
-﻿namespace BenchmarkGenerator
+﻿module BenchmarkGenerator
 
 open System
 open System.Diagnostics
@@ -9,7 +9,24 @@ open CommandLine
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
+open Microsoft.Extensions.Logging
 open Newtonsoft.Json
+
+[<AutoOpen>]
+module Log =
+    let private loggerFactory = LoggerFactory.Create(
+        fun builder ->
+            builder.AddSimpleConsole(fun options ->
+                options.IncludeScopes <- true
+                options.SingleLine <- true
+                options.TimestampFormat <- "HH:mm:ss.fff"
+            )
+            |> ignore
+    )
+    
+    type internal Marker = interface end
+    
+    let internal log = loggerFactory.CreateLogger<Marker>()
 
 /// General utilities
 [<RequireQualifiedAccess>]
@@ -29,17 +46,18 @@ module Utils =
         envVariables
         |> List.iter (fun (k, v) -> info.EnvironmentVariables[k] <- v)
         
-        printfn $"Running '{name} {args}' in '{workingDir}'"
+        log.LogInformation $"Running '{name} {args}' in '{workingDir}'"
         let p = Process.Start(info)
         let o = p.StandardOutput.ReadToEnd()
         let errors = p.StandardError.ReadToEnd()
         p.WaitForExit()
         if p.ExitCode <> 0 then
             let msg = $"Process {name} {args} failed: {errors}."
-            printfn $"{msg}. Its full output: {o}"
+            log.LogError $"{msg}. Its full output:"
+            printfn $"{o}"
             failwith msg
         else if printOutput then
-            printfn "Full output:"
+            log.LogInformation "Full output of the process:"
             printfn $"{o}"
 
 /// Handling Git operations
@@ -50,7 +68,7 @@ module Git =
     let clone (dir : string) (gitUrl : string) : Repository =
         if Directory.Exists dir then
             failwith $"{dir} already exists for code root"
-        printfn $"Fetching '{gitUrl}' in '{dir}'..."
+        log.LogInformation $"Fetching '{gitUrl}' in '{dir}'..."
         Repository.Init(dir) |> ignore
         let repo = new Repository(dir)
         let remote = repo.Network.Remotes.Add("origin", gitUrl)
@@ -58,7 +76,7 @@ module Git =
         repo
         
     let checkout (repo : Repository) (revision : string) : unit =
-        printfn $"Checkout revision {revision} in {repo.Info.Path}"
+        log.LogInformation $"Checkout revision {revision} in {repo.Info.Path}"
         Commands.Checkout(repo, revision) |> ignore
 
 /// Preparing a codebase based on a 'RepoSpec'
@@ -84,14 +102,14 @@ module RepoSetup =
         Path.Combine(config.BaseDir, spec.Name, spec.Revision)
     
     let prepare (config : Config) (spec : RepoSpec) =
-        printfn $"Checking out {spec}"
+        log.LogInformation $"Checking out {spec}"
         let dir = revisionDir config spec
         if Repository.IsValid dir |> not then
             use repo = Git.clone dir spec.GitUrl
             Git.checkout repo spec.Revision
             repo
         else
-            printfn $"{dir} already exists - will assume the correct repository is already checked out"
+            log.LogInformation $"{dir} already exists - will assume the correct repository is already checked out"
             new Repository(dir)
 
 [<RequireQualifiedAccess>]
@@ -211,6 +229,7 @@ module Generate =
         with member this.Path = match this with | Local codeRoot -> codeRoot | Git repo -> repo.Info.Path 
     
     let prepareCodebase (config : Config) (case : BenchmarkCase) : Codebase =
+        use _ = Log.log.BeginScope("PrepareCodebase")
         let codebase =
             match (case.Repo :> obj, case.LocalCodeRoot) with
             | null, null -> failwith "Either git repo or local code root details are required"
@@ -237,7 +256,7 @@ module Generate =
         let bl = BinaryLogGeneration.Within(DirectoryInfo(Path.GetDirectoryName sln))
         
         let projects = loader.LoadSln(sln, [], bl) |> Seq.toList
-        printfn $"{projects.Length} projects loaded"
+        log.LogInformation $"{projects.Length} projects loaded"
         
         let fsOptions =
             projects
@@ -304,15 +323,15 @@ module Generate =
         let inputsPath = makeInputsPath codebase.Path
         Directory.CreateDirectory(Path.GetDirectoryName(inputsPath)) |> ignore
         File.WriteAllText(inputsPath, serialized)
-        printfn $"Inputs saved in {inputsPath}"
+        log.LogInformation $"Inputs saved in {inputsPath}"
         
         if doRun then
-            printfn $"Starting the benchmark..."
+            log.LogInformation $"Starting the benchmark..."
             let workingDir = Path.GetDirectoryName(config.RunnerProjectPath)
             let envVariables = emptyProjInfoEnvironmentVariables()
             Utils.runProcess "dotnet" $"run -c Release --project BenchmarkRunner.fsproj {inputsPath}" workingDir envVariables true
         else
-            printfn $"Not running the benchmark as requested"
+            log.LogInformation $"Not running the benchmark as requested"
             
         match codebase, cleanup with
         | Local root, _ -> ()
@@ -347,11 +366,18 @@ module Generate =
                     Config.RunnerProjectPath = args.BenchmarkPath
                 }
             let case =
-                let path = args.Input
-                path
-                |> File.ReadAllText
-                |> JsonConvert.DeserializeObject<BenchmarkCase>
+                use _ = Log.log.BeginScope("Read input")
+                try
+                    let path = args.Input
+                    path
+                    |> File.ReadAllText
+                    |> JsonConvert.DeserializeObject<BenchmarkCase>
+                with e ->
+                    let msg = $"Failed to read inputs file: {e.Message}"
+                    log.LogCritical(msg)
+                    reraise()
             
+            use _ = Log.log.BeginScope("PrepareAndRun")
             prepareAndRun config case args.Run args.Cleanup
             0
         | _ ->

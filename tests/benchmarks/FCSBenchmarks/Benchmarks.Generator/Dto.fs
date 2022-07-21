@@ -1,4 +1,4 @@
-﻿namespace BenchmarkGenerator.Dto
+﻿module BenchmarkGenerator.Dto
 
 open System
 
