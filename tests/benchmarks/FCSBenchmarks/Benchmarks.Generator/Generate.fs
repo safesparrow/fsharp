@@ -11,6 +11,7 @@ open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
 open Newtonsoft.Json
 
+/// General utilities
 [<RequireQualifiedAccess>]
 module Utils =
     let runProcess name args workingDir (envVariables : (string * string) list) (printOutput : bool) =
@@ -41,7 +42,7 @@ module Utils =
             printfn "Full output:"
             printfn $"{o}"
 
-
+/// Handling Git operations
 [<RequireQualifiedAccess>]
 module Git =
     open LibGit2Sharp
@@ -60,6 +61,7 @@ module Git =
         printfn $"Checkout revision {revision} in {repo.Info.Path}"
         Commands.Checkout(repo, revision) |> ignore
 
+/// Preparing a codebase based on a 'RepoSpec'
 [<RequireQualifiedAccess>]
 module RepoSetup =
     open LibGit2Sharp
@@ -87,13 +89,18 @@ module RepoSetup =
         if Repository.IsValid dir |> not then
             use repo = Git.clone dir spec.GitUrl
             Git.checkout repo spec.Revision
+            repo
         else
             printfn $"{dir} already exists - will assume the correct repository is already checked out"
-        dir
+            new Repository(dir)
 
+[<RequireQualifiedAccess>]
 module Generate =
         
-    // member bc.ParseAndCheckFileInProject(fileName: string, fileVersion, sourceText: ISourceText, options: FSharpProjectOptions, userOpName) =
+    /// <summary>
+    /// An action that calls the following FSharpChecker method:
+    /// member bc.ParseAndCheckFileInProject(fileName: string, fileVersion, sourceText: ISourceText, options: FSharpProjectOptions, userOpName) =
+    /// </summary>
     type AnalyseFile =
         {
             FileName: string
@@ -102,6 +109,7 @@ module Generate =
             Options: FSharpProjectOptions
         }
     
+    /// An action to be performed during a benchmark
     type BenchmarkAction =
         | AnalyseFile of AnalyseFile
         
@@ -110,7 +118,8 @@ module Generate =
             Actions : BenchmarkAction list
             Config : BenchmarkConfig
         }
-        
+    
+    [<RequireQualifiedAccess>]
     module Serialization =
         
         open Microsoft.FSharp.Reflection
@@ -196,21 +205,28 @@ module Generate =
             RunnerProjectPath : string
         }
     
-    let prepareCodebase (config : Config) (case : BenchmarkCase) =
-        let codeRoot =
+    type Codebase =
+        | Local of string
+        | Git of LibGit2Sharp.Repository
+        with member this.Path = match this with | Local codeRoot -> codeRoot | Git repo -> repo.Info.Path 
+    
+    let prepareCodebase (config : Config) (case : BenchmarkCase) : Codebase =
+        let codebase =
             match (case.Repo :> obj, case.LocalCodeRoot) with
             | null, null -> failwith "Either git repo or local code root details are required"
             | repo, null ->
-                RepoSetup.prepare {BaseDir = config.CheckoutBaseDir} case.Repo
-            | null, codeRoot -> codeRoot
+                let repo = RepoSetup.prepare {BaseDir = config.CheckoutBaseDir} case.Repo
+                Codebase.Git repo
+            | null, codeRoot ->
+                Codebase.Local codeRoot
             | repo, codeRoot -> failwith $"Both git repo and local code root were provided - that's not supported"
-        
-        let sln = Path.Combine(codeRoot, case.SlnRelative)
-        Utils.runProcess "dotnet" $"restore {sln}" codeRoot [] false
-        codeRoot
+        let sln = Path.Combine(codebase.Path, case.SlnRelative)
+        Utils.runProcess "dotnet" $"restore {sln}" codebase.Path [] false
+        codebase
     
     [<MethodImpl(MethodImplOptions.NoInlining)>]
-    let doLoadOptions (toolsPath : ToolsPath) (sln : string) =
+    let private doLoadOptions (toolsPath : ToolsPath) (sln : string) =
+        // TODO allow customization of build properties
         let props =
             [
                 "Configuration", "Debug"
@@ -218,7 +234,7 @@ module Generate =
                 "Platform", "x64"
             ]
         let loader = WorkspaceLoader.Create(toolsPath, props)
-        let bl = BinaryLogGeneration.Within(DirectoryInfo("d:/projekty/binlogs"))//Path.GetDirectoryName sln))
+        let bl = BinaryLogGeneration.Within(DirectoryInfo(Path.GetDirectoryName sln))
         
         let projects = loader.LoadSln(sln, [], bl) |> Seq.toList
         printfn $"{projects.Length} projects loaded"
@@ -230,7 +246,7 @@ module Generate =
         |> dict
     
     [<MethodImpl(MethodImplOptions.NoInlining)>]
-    let loadOptions (sln : string) =
+    let private loadOptions (sln : string) =
         let toolsPath = init sln
         doLoadOptions toolsPath sln
     
@@ -238,7 +254,7 @@ module Generate =
         let dto = inputs |> Serialization.inputsToJson
         dto |> JsonConvert.SerializeObject
     
-    let generateInputs (config : Config) (case : BenchmarkCase) (codeRoot : string) =
+    let private generateInputs (config : Config) (case : BenchmarkCase) (codeRoot : string) =
         let sln = Path.Combine(codeRoot, case.SlnRelative)
         let options = loadOptions sln
         
@@ -261,7 +277,7 @@ module Generate =
             BenchmarkInputs.Config = config
         }
     
-    let makeInputsPath (codeRoot : string) =
+    let private makeInputsPath (codeRoot : string) =
         let artifactsDir = Path.Combine(codeRoot, ".artifacts")
         let dateStr = DateTime.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss")
         Path.Combine(artifactsDir, $"{dateStr}.fcsinputs.json") 
@@ -277,15 +293,15 @@ module Generate =
             "MSBuildSDKsPath"
         ]
     
-    let emptyProjInfoEnvironmentVariables () =
+    let private emptyProjInfoEnvironmentVariables () =
         projInfoEnvVariables
         |> List.map (fun var -> var, "")
     
-    let prepareAndRun (config : Config) (case : BenchmarkCase) (doRun : bool) =
-        let codeRoot = prepareCodebase config case
-        let inputs = generateInputs config case codeRoot
+    let private prepareAndRun (config : Config) (case : BenchmarkCase) (doRun : bool) (cleanup : bool) =
+        let codebase = prepareCodebase config case
+        let inputs = generateInputs config case codebase.Path
         let serialized = serializeInputs inputs
-        let inputsPath = makeInputsPath codeRoot
+        let inputsPath = makeInputsPath codebase.Path
         Directory.CreateDirectory(Path.GetDirectoryName(inputsPath)) |> ignore
         File.WriteAllText(inputsPath, serialized)
         printfn $"Inputs saved in {inputsPath}"
@@ -295,21 +311,26 @@ module Generate =
             let workingDir = Path.GetDirectoryName(config.RunnerProjectPath)
             let envVariables = emptyProjInfoEnvironmentVariables()
             Utils.runProcess "dotnet" $"run -c Release --project BenchmarkRunner.fsproj {inputsPath}" workingDir envVariables true
-            // TODO optional cleanup of the coderoot
         else
             printfn $"Not running the benchmark as requested"
+            
+        match codebase, cleanup with
+        | Local root, _ -> ()
+        | Git repo, false -> ()
+        | Git repo, true ->
+            Directory.Delete repo.Info.Path
     
     type Args =
         {
-            [<CommandLine.Option(Default = ".artifacts", HelpText = "Base directory for git checkouts")>]
-            CheckoutBaseDir : string
-            [<CommandLine.Option(Default = __SOURCE_DIRECTORY__ + "../Benchmarks.Runner/Benchmarks.Runner.fsproj", HelpText = "Path to the benchmark runner project")>]
-            BenchmarkProjectPath : string
-            [<CommandLine.Option(Required = true, HelpText = "Path to the input file describing the benchmark")>]
+            [<CommandLine.Option('c', Default = ".artifacts", HelpText = "Base directory for git checkouts")>]
+            CheckoutsDir : string
+            [<CommandLine.Option('b', Default = "../Benchmarks.Runner/Benchmarks.Runner.fsproj", HelpText = "Path to the benchmark runner project - defaults to '../Benchmarks.Runner/Benchmarks.Runner.fsproj'")>]
+            BenchmarkPath : string
+            [<CommandLine.Option('i', Required = true, HelpText = "Path to the input file describing the benchmark")>]
             Input : string
-            [<CommandLine.Option(Default = true, HelpText = "If set to false, exits before running the benchmark")>]
+            [<CommandLine.Option(Default = true, HelpText = "If set to false, prepares the benchmark and prints the commandline to run it, then exits")>]
             Run : bool
-            [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards")>]
+            [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards. Doesn't apply to local codebases")>]
             Cleanup : bool
         }
     
@@ -322,8 +343,8 @@ module Generate =
             let args = parseResult.Value
             let config =
                 {
-                    Config.CheckoutBaseDir = args.CheckoutBaseDir
-                    Config.RunnerProjectPath = args.BenchmarkProjectPath
+                    Config.CheckoutBaseDir = args.CheckoutsDir
+                    Config.RunnerProjectPath = args.BenchmarkPath
                 }
             let case =
                 let path = args.Input
@@ -331,7 +352,7 @@ module Generate =
                 |> File.ReadAllText
                 |> JsonConvert.DeserializeObject<BenchmarkCase>
             
-            prepareAndRun config case args.Run
+            prepareAndRun config case args.Run args.Cleanup
             0
         | _ ->
             1

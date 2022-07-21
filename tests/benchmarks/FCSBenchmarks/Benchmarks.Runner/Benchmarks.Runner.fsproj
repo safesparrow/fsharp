@@ -9,6 +9,7 @@
 
     <ItemGroup>
         <Compile Include="Runner.fs" />
+        <Content Include="README.md" />
     </ItemGroup>
 
     <ItemGroup>
