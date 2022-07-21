@@ -3,14 +3,16 @@
         <TargetFramework>net6.0</TargetFramework>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>exe</OutputType>
+        <RootNamespace>BenchmarkGenerator</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="Dto.fs" />
         <Compile Include="Generate.fs" />
-        <Content Include="inputs\case1_git.json" />
-        <Content Include="inputs\case1.json" />
+        <Content Include="inputs\50_leaves.json" />
+        <Content Include="inputs\fantomas.json" />
     </ItemGroup>
     <ItemGroup>
+      <PackageReference Include="CommandLineParser.FSharp" Version="2.9.1" />
       <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.59.1" />
       <PackageReference Include="LibGit2Sharp" Version="0.26.2" />
       <PackageReference Include="Microsoft.Build.Framework" Version="17.2.0" ExcludeAssets="runtime" />

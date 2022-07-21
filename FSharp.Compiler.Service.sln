@@ -42,11 +42,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		src\Compiler\FSComp.txt = src\Compiler\FSComp.txt
 	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "BenchmarkRunner", "tests\benchmarks\FCSBenchmarks\BenchmarkRunner\BenchmarkRunner.fsproj", "{5AF477A4-5F64-4695-A20B-4114F040326D}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Benchmarks.Runner", "tests\benchmarks\FCSBenchmarks\Benchmarks.Runner\Benchmarks.Runner.fsproj", "{5AF477A4-5F64-4695-A20B-4114F040326D}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CheckerBenchmark.Dto", "tests\benchmarks\FCSBenchmarks\CheckerBenchmark.Dto\CheckerBenchmark.Dto.fsproj", "{8453063E-0AED-44CD-98B6-533450E54DC0}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "BenchmarkGenerator", "tests\benchmarks\FCSBenchmarks\BenchmarkGenerator\BenchmarkGenerator.fsproj", "{7A81B9A9-DCF5-47D0-AB96-C11021C4CCE0}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Benchmarks.Generator", "tests\benchmarks\FCSBenchmarks\Benchmarks.Generator\Benchmarks.Generator.fsproj", "{7A81B9A9-DCF5-47D0-AB96-C11021C4CCE0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

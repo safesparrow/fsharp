@@ -4,6 +4,7 @@
         <TargetFramework>net6.0</TargetFramework>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>exe</OutputType>
+        <RootNamespace>BenchmarkRunner</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

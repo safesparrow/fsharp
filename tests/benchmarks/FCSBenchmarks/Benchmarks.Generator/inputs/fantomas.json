@@ -1,0 +1,14 @@
+﻿{
+  "Repo": {
+    "Name": "fantomas",
+    "GitUrl": "https://github.com/fsprojects/fantomas",
+    "Revision" : "0fe6785076e045f28e4c88e6a57dd09b649ce671"
+  },
+  "SlnRelative": "fantomas.sln",
+  "CheckActions": [
+    {
+      "FileName": "Integration/DaemonTests.fs",
+      "ProjectName": "Fantomas.Tests"
+    }
+  ]
+}

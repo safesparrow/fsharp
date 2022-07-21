@@ -5,6 +5,7 @@ open System.Diagnostics
 open System.IO
 open System.Runtime.CompilerServices
 open BenchmarkGenerator.Dto
+open CommandLine
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
@@ -192,7 +193,7 @@ module Generate =
     type Config =
         {
             CheckoutBaseDir : string
-            BenchmarkPath : string
+            RunnerProjectPath : string
         }
     
     let prepareCodebase (config : Config) (case : BenchmarkCase) =
@@ -291,27 +292,46 @@ module Generate =
         
         if doRun then
             printfn $"Starting the benchmark..."
-            let workingDir = config.BenchmarkPath
+            let workingDir = Path.GetDirectoryName(config.RunnerProjectPath)
             let envVariables = emptyProjInfoEnvironmentVariables()
             Utils.runProcess "dotnet" $"run -c Release --project BenchmarkRunner.fsproj {inputsPath}" workingDir envVariables true
             // TODO optional cleanup of the coderoot
         else
             printfn $"Not running the benchmark as requested"
     
+    type Args =
+        {
+            [<CommandLine.Option(Default = ".artifacts", HelpText = "Base directory for git checkouts")>]
+            CheckoutBaseDir : string
+            [<CommandLine.Option(Default = __SOURCE_DIRECTORY__ + "../Benchmarks.Runner/Benchmarks.Runner.fsproj", HelpText = "Path to the benchmark runner project")>]
+            BenchmarkProjectPath : string
+            [<CommandLine.Option(Required = true, HelpText = "Path to the input file describing the benchmark")>]
+            Input : string
+            [<CommandLine.Option(Default = true, HelpText = "If set to false, exits before running the benchmark")>]
+            Run : bool
+            [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards")>]
+            Cleanup : bool
+        }
+    
     [<EntryPoint>]
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let main args =
-        let doRun = match args with [|doRun|] -> bool.Parse(doRun) | _ -> true
-        let config =
-            {
-                Config.CheckoutBaseDir = "CheckerBenchmarks"
-                Config.BenchmarkPath = Path.Combine(__SOURCE_DIRECTORY__, "../BenchmarkRunner")
-            }
-        let case =
-            let path = Path.Combine(__SOURCE_DIRECTORY__, "inputs/case1_git.json")
-            path
-            |> File.ReadAllText
-            |> JsonConvert.DeserializeObject<BenchmarkCase>
+        let parseResult = Parser.Default.ParseArguments<Args> args
+        match parseResult.Tag with
+        | ParserResultType.Parsed ->
+            let args = parseResult.Value
+            let config =
+                {
+                    Config.CheckoutBaseDir = args.CheckoutBaseDir
+                    Config.RunnerProjectPath = args.BenchmarkProjectPath
+                }
+            let case =
+                let path = args.Input
+                path
+                |> File.ReadAllText
+                |> JsonConvert.DeserializeObject<BenchmarkCase>
             
-        prepareAndRun config case doRun
-        0
+            prepareAndRun config case args.Run
+            0
+        | _ ->
+            1
