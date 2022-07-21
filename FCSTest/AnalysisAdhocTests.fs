@@ -58,14 +58,16 @@ module AnalysisAdhocTests =
     
     [<EntryPoint>]
     let rec main args =
-        match args with
-        | [||] ->
-            let x = Console.ReadLine()
-            main [|x|]
-        | [|x|] ->
-             match Int32.TryParse x with
-             | true, i when i>=0 && i<examples.Length -> doRunAnalysis dirs $"dumps/{examples[i]}"
-             | true, _ -> failwith "Invalid args"
-             | _ -> doRunAnalysis dirs x
-             0
-        | _ -> failwith "invalid args"
+        SolutionGenerator.generate "d:/projekty/fsharp_samples/50_leaves_fixed" 50
+        0
+        // match args with
+        // | [||] ->
+        //     let x = Console.ReadLine()
+        //     main [|x|]
+        // | [|x|] ->
+        //      match Int32.TryParse x with
+        //      | true, i when i>=0 && i<examples.Length -> doRunAnalysis dirs $"dumps/{examples[i]}"
+        //      | true, _ -> failwith "Invalid args"
+        //      | _ -> doRunAnalysis dirs x
+        //      0
+        // | _ -> failwith "invalid args"

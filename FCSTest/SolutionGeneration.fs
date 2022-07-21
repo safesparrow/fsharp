@@ -7,6 +7,7 @@ open Microsoft.Build.Evaluation
 
 module SolutionGenerator =
     let generate (dir : string) (leafCount : int) =
+        Directory.CreateDirectory dir |> ignore
         let makePath suffix = Path.Combine(dir, suffix)
         let sourceFilePath = makePath "library.fs"
         
@@ -28,7 +29,7 @@ module SolutionGenerator =
             p.Save(makePath (Path.Combine(name, $"{name}.fsproj")))
         
         let name = "root"
-        Directory.Delete(makePath name, true)
+        // Directory.Delete(makePath name, true)
         let slnName = "solution"
         let slnPath = makePath $"{slnName}.sln"
         if File.Exists slnPath then File.Delete slnPath
@@ -62,7 +63,7 @@ module SolutionGenerator =
         for i in nrs do
             let name = $"leaf_{i}"
             writeProject name
-            root.AddItem("ProjectReference", $"../{name}/{name}.fsproj") |> ignore
+            root.AddItem("ProjectReference", $"{name}/{name}.fsproj") |> ignore
             runX $"sln add {name}"
         
         root.Save(makePath (Path.Combine(name, $"{name}.fsproj")))

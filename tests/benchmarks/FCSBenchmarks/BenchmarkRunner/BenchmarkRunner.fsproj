@@ -7,15 +7,17 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Library.fs" />
+        <Compile Include="Runner.fs" />
     </ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\..\..\..\src\Compiler\FSharp.Compiler.Service.fsproj" />
+      <ProjectReference Include="..\CheckerBenchmark.Dto\CheckerBenchmark.Dto.fsproj" />
     </ItemGroup>
 
     <ItemGroup>
       <PackageReference Include="FsPickler" Version="5.3.2" />
+      <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     </ItemGroup>
 
 </Project>
