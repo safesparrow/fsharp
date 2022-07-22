@@ -6,30 +6,41 @@ A command-line app for generating and running benchmarks of FCS using high-level
 ## How it works
 ### Dependency graph
 ```mermaid
-graph TD;
-    subgraph Generator exe
-        Z(FSharp.Compiler.Service NuGet)-->B(Ionide.ProjInfo.FCS NuGet)
-        B-->C(Benchmarks.Generator project)
-        style Z fill: #66e0ff
+graph LR;
+    subgraph Generation
+        A1(Ionide.ProjInfo.FCS) --> A2(Benchmarks.Generator)
+        A3 --> A1
+        A3(FSharp.Compiler.Service NuGet) --> A2
+        style A3 fill:Blue
     end
-    subgraph Runner exe
-        D(FSharp.Compiler.Service source)-->|Project reference|E(Benchmarks.Runner project)
-        style D fill: #ffb3b3
+
+    A2 -.->|JSON| R2
+    
+    subgraph Running
+        R1(FSharp.Compiler.Service source) --> R2(Benchmarks.Runner)
+        style R1 fill:green
     end
-    C-.->|JSON|E
 ```
 ### Process steps graph
 ```mermaid
-graph LR;
-    subgraph Dependency Graph
-        subgraph Generator exe
-            Z(FSharp.Compiler.Service NuGet)-->B(Ionide.ProjInfo.FCS NuGet)
-            B-->C(Benchmarks.Generator project)
-        end
-        subgraph Runner exe
-            D(FSharp.Compiler.Service source)-->E(Benchmarks.Runner project)
-        end
-        C-.->|JSON|E
+graph TD;
+    AA(description.json)
+    AA-->A
+    AB(GitHub/Git server)
+    AB-->B
+    subgraph Benchmarks.Generator
+        A(Codebase spec and analysis actions)-->|libgit2sharp| B(Locally checked out codebase);
+        B-->|Ionide.ProjInfo.FCS| C(FSharpProjectOptions)
+        A-->D(BenchmarkSpec)
+        C-->D
+        D-->E(JSON-friendly DTO)
+    end
+    E-->|Newtonsoft.Json|F(FCS inputs.json)
+    F-->|Newtonsoft.Json|G(JSON-friendly DTO)
+    subgraph Benchmarks.Runner
+        G-->H(BenchmarkSpec' - separate type)
+        J(FSharp.Compiler.Service source)-->K(FSharp.Compiler.Service dll)
+        H-->K
     end
 ```
 ## How to use it
