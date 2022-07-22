@@ -58,8 +58,7 @@ module Utils =
             printfn $"{o}"
             failwith msg
         else if printOutput then
-            log.LogInformation "Full output of the process:"
-            printfn $"{o}"
+            log.LogInformation ("Full output of the process:" + Environment.NewLine + o)
 
 /// Handling Git operations
 [<RequireQualifiedAccess>]
@@ -205,10 +204,18 @@ module Generate =
     type CodebaseSourceType = Local | Git
 
     [<CLIMutable>]
+    type CodebasePrepStep =
+        {
+            Command : string
+            Args : string
+        }
+    
+    [<CLIMutable>]
     type BenchmarkCase =
         {
             Repo : RepoSetup.RepoSpec
             LocalCodeRoot : string
+            CodebasePrep : CodebasePrepStep list
             SlnRelative : string
             CheckActions : CheckAction list
         }
@@ -241,6 +248,13 @@ module Generate =
                 Codebase.Local codeRoot
             | repo, codeRoot -> failwith $"Both git repo and local code root were provided - that's not supported"
         let sln = Path.Combine(codebase.Path, case.SlnRelative)
+        log.LogInformation($"Running {case.CodebasePrep.Length} codebase prep steps...")
+        case.CodebasePrep
+        |> List.iteri (fun i step ->
+            log.LogInformation($"Running codebase prep step [{i+1}/{case.CodebasePrep.Length}]")
+            Utils.runProcess step.Command step.Args codebase.Path [] true
+        )
+        
         Utils.runProcess "dotnet" $"restore {sln}" codebase.Path [] false
         codebase
     
@@ -262,11 +276,7 @@ module Generate =
             |> Seq.filter (fun p -> p.ProjectType = SolutionProjectType.KnownToBeMSBuildFormat)
             |> Seq.map (fun p -> p.AbsolutePath)
             |> Seq.toList
-        let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
-        loader.Notifications.Add(fun x ->
-            printfn $"{x.ProjFile}: {x.DebugPrint}"
-            )
-        
+        let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()        
         let projects = loader.LoadSln(sln, [], bl) |> Seq.toList
         log.LogInformation $"{projects.Length} projects loaded"
         if projects.Length = 0 then
@@ -347,8 +357,17 @@ module Generate =
             use _ = log.BeginScope $"Run"
             log.LogInformation $"Starting the benchmark..."
             let workingDir = Path.GetDirectoryName(config.RunnerProjectPath)
-            let envVariables = emptyProjInfoEnvironmentVariables()
-            Utils.runProcess "dotnet" $"run -c Release --project BenchmarkRunner.fsproj {inputsPath}" workingDir envVariables true
+            let envVariables =
+                emptyProjInfoEnvironmentVariables()
+                @ [
+                    "Platform", "x64"
+                ]
+            log.LogInformation($"Running {config} codebase preparation steps:")
+            log.LogInformation("Building runner project...")
+            Utils.runProcess "dotnet" $"build -c Release Benchmarks.Runner.fsproj" workingDir envVariables true
+            log.LogInformation("**** Runner project built. Running benchmark...")
+            let projFullPath = Path.Combine(workingDir, "Benchmarks.Runner.fsproj")
+            Utils.runProcess "dotnet" $"run -c Release --no-restore --project {projFullPath} -- {inputsPath}" workingDir envVariables true
         else
             log.LogInformation $"Not running the benchmark as requested"
             
@@ -363,7 +382,7 @@ module Generate =
         {
             [<CommandLine.Option('c', Default = "d:/.artifacts", HelpText = "Base directory for git checkouts")>]
             CheckoutsDir : string
-            [<CommandLine.Option('b', Default = "../Benchmarks.Runner/Benchmarks.Runner.fsproj", HelpText = "Path to the benchmark runner project - defaults to '../Benchmarks.Runner/Benchmarks.Runner.fsproj'")>]
+            [<CommandLine.Option('b', Default = "../../../../Benchmarks.Runner/Benchmarks.Runner.fsproj", HelpText = "Path to the benchmark runner project - defaults to '../Benchmarks.Runner/Benchmarks.Runner.fsproj'")>]
             BenchmarkPath : string
             [<CommandLine.Option('i', Required = true, HelpText = "Path to the input file describing the benchmark")>]
             Input : string
@@ -383,7 +402,7 @@ module Generate =
             let config =
                 {
                     Config.CheckoutBaseDir = args.CheckoutsDir
-                    Config.RunnerProjectPath = args.BenchmarkPath
+                    Config.RunnerProjectPath = Path.Combine(Environment.CurrentDirectory, args.BenchmarkPath)
                 }
             let case =
                 use _ = Log.log.BeginScope("Read input")

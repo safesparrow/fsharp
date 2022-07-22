@@ -119,5 +119,5 @@ let main args =
         run inputs
         0
     | _ ->
-        printfn $"Invalid args: {args}"; 1
+        printfn $"Invalid args: %A{args}"; 1
     
