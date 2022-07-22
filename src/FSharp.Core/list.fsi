@@ -7,6 +7,24 @@ open System.Collections.Generic
 open Microsoft.FSharp.Core
 open Microsoft.FSharp.Collections
 
+[<RequireQualifiedAccess>]
+module CollectionTracing =
+    
+    [<StructuralEquality; StructuralComparison>]
+    [<RequireQualifiedAccess>]
+    type CollectionType = | List | Array
+      
+    [<StructuralEquality; StructuralComparison>]
+    type Entry =
+        {
+            CollectionType : CollectionType
+            Type : string
+            Function : string
+            Length : int
+        }
+      
+    val calls : System.Collections.Generic.List<Entry>
+
 /// <summary>Contains operations for working with values of type <see cref="T:Microsoft.FSharp.Collections.list`1"/>.</summary>
 ///
 /// <namespacedoc><summary>Operations for collections such as lists, arrays, sets, maps and sequences. See also 
@@ -16,6 +34,9 @@ open Microsoft.FSharp.Collections
 [<RequireQualifiedAccess>]
 module List = 
 
+    val recordEntry: string -> 'a list -> unit
+    val recordEntryReturn: string -> 'a list -> 'a list
+    
     /// <summary>Returns a new list that contains all pairings of elements from two lists.</summary>
     ///
     /// <param name="list1">The first input list.</param>

@@ -1436,11 +1436,15 @@ type IncrementalBuilder(initialState: IncrementalBuilderInitialState, state: Inc
       let useSimpleResolutionSwitch = "--simpleresolution"
 
       node {
-
+        
         // Trap and report diagnostics from creation.
         let delayedLogger = CapturingDiagnosticsLogger("IncrementalBuilderCreation")
         use _ = new CompilationGlobalsScope(delayedLogger, BuildPhase.Parameter)
 
+        
+        let t = DateTime.Now.ToString("mm:ss.fff")
+        printfn $"{t} start IncrementalBuild.CreateOneIncrementalBuilder()"
+        
         let! builderOpt =
          node {
           try
@@ -1661,6 +1665,8 @@ type IncrementalBuilder(initialState: IncrementalBuilderInitialState, state: Inc
                     defaultTimeStamp)
 
             let builder = IncrementalBuilder(initialState, IncrementalBuilderState.Create(initialState))
+            let t = DateTime.Now.ToString("mm:ss.fff")
+            printfn $"{t} after IncrementalBuild.CreateOneIncrementalBuilder({assemblyName})"
             return Some builder
           with exn ->
             errorRecoveryNoRange exn
