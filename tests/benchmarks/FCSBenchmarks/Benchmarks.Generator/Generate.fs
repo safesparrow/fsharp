@@ -13,21 +13,18 @@ open Ionide.ProjInfo.Types
 open Microsoft.Extensions.Logging
 open Newtonsoft.Json
 
-[<AutoOpen>]
-module Log =
-    let private loggerFactory = LoggerFactory.Create(
-        fun builder ->
-            builder.AddSimpleConsole(fun options ->
-                options.IncludeScopes <- false
-                options.SingleLine <- true
-                options.TimestampFormat <- "HH:mm:ss.fff"
-            )
-            |> ignore
-    )
-    
-    type internal Marker = interface end
-    
-    let internal log = loggerFactory.CreateLogger<Marker>()
+let private loggerFactory = LoggerFactory.Create(
+    fun builder ->
+        builder.AddSimpleConsole(fun options ->
+            options.IncludeScopes <- false
+            options.SingleLine <- true
+            options.TimestampFormat <- "HH:mm:ss.fff"
+        )
+        |> ignore
+)
+
+type internal Marker = interface end
+let private log = loggerFactory.CreateLogger<Marker>()
 
 /// General utilities
 [<RequireQualifiedAccess>]
@@ -121,87 +118,7 @@ module RepoSetup =
 
 [<RequireQualifiedAccess>]
 module Generate =
-        
-    /// <summary>
-    /// An action that calls the following FSharpChecker method:
-    /// member bc.ParseAndCheckFileInProject(fileName: string, fileVersion, sourceText: ISourceText, options: FSharpProjectOptions, userOpName) =
-    /// </summary>
-    type AnalyseFile =
-        {
-            FileName: string
-            FileVersion: int
-            SourceText: string
-            Options: FSharpProjectOptions
-        }
     
-    /// An action to be performed during a benchmark
-    type BenchmarkAction =
-        | AnalyseFile of AnalyseFile
-        
-    type BenchmarkInputs =
-        {
-            Actions : BenchmarkAction list
-            Config : BenchmarkConfig
-        }
-    
-    [<RequireQualifiedAccess>]
-    module Serialization =
-        
-        open Microsoft.FSharp.Reflection
-
-        let rec private referenceToDto (rp : FSharpReferencedProject) : FSharpReferenceDto =
-            // Reflection is needed since DU cases are internal.
-            // The alternative is to add an [<InternalsVisibleTo>] entry to the FCS project
-            let c, fields = FSharpValue.GetUnionFields(rp, typeof<FSharpReferencedProject>, true)
-            match c.Name with
-            | "FSharpReference" ->
-                let outputFile = fields[0] :?> string
-                let options = fields[1] :?> FSharpProjectOptions
-                let fakeOptions = optionsToDto options
-                {
-                    FSharpReferenceDto.OutputFile = outputFile
-                    FSharpReferenceDto.Options = fakeOptions
-                }
-            | _ -> failwith $"Unsupported {nameof(FSharpReferencedProject)} DU case: {c.Name}. only 'FSharpReference' is supported by the serializer"
-        
-        and private optionsToDto (o : FSharpProjectOptions) : FSharpProjectOptionsDto =
-            {
-                ProjectFileName = o.ProjectFileName
-                ProjectId = o.ProjectId
-                SourceFiles = o.SourceFiles
-                OtherOptions = o.OtherOptions
-                ReferencedProjects =
-                    o.ReferencedProjects
-                    |> Array.map referenceToDto
-                IsIncompleteTypeCheckEnvironment = o.IsIncompleteTypeCheckEnvironment
-                UseScriptResolutionRules = o.UseScriptResolutionRules
-                LoadTime = o.LoadTime
-                Stamp = o.Stamp
-            }
-                
-        type BenchmarkInputsDto =
-            {
-                Actions : BenchmarkActionDto list
-                Config : BenchmarkConfig
-            }
-            
-        let actionToJson (action : BenchmarkAction) =
-            match action with
-            | BenchmarkAction.AnalyseFile x ->
-                {
-                    AnalyseFileDto.FileName = x.FileName
-                    FileVersion = x.FileVersion
-                    SourceText = x.SourceText
-                    Options = x.Options |> optionsToDto
-                }
-                |> BenchmarkActionDto.AnalyseFile
-        
-        let inputsToJson (inputs : BenchmarkInputs) =
-            {
-                BenchmarkInputsDto.Actions = inputs.Actions |> List.map actionToJson
-                Config = inputs.Config
-            }
-
     type CheckAction =
         {
             FileName : string
@@ -243,7 +160,7 @@ module Generate =
         with member this.Path = match this with | Local codeRoot -> codeRoot | Git repo -> repo.Info.WorkingDirectory
     
     let prepareCodebase (config : Config) (case : BenchmarkCase) : Codebase =
-        use _ = Log.log.BeginScope("PrepareCodebase")
+        use _ = log.BeginScope("PrepareCodebase")
         let codebase =
             match (case.Repo :> obj, case.LocalCodeRoot) with
             | null, null -> failwith "Either git repo or local code root details are required"
@@ -260,8 +177,6 @@ module Generate =
             log.LogInformation($"Running codebase prep step [{i+1}/{case.CodebasePrep.Length}]")
             Utils.runProcess step.Command step.Args codebase.Path [] true
         )
-        
-        Utils.runProcess "dotnet" $"restore {sln}" codebase.Path [] false
         codebase
     
     [<MethodImpl(MethodImplOptions.NoInlining)>]
@@ -287,11 +202,6 @@ module Generate =
         log.LogInformation($"Constructing FSharpProjectOptions from {sln}")
         let toolsPath = init sln
         doLoadOptions toolsPath sln
-    
-    let private serializeInputs (inputs : BenchmarkInputs) : string =
-        log.LogInformation("Serializing generated inputs")
-        let dto = inputs |> Serialization.inputsToJson
-        dto |> JsonConvert.SerializeObject
     
     let private generateInputs (case : BenchmarkCase) (codeRoot : string) =
         let sln = Path.Combine(codeRoot, case.SlnRelative)
@@ -340,6 +250,7 @@ module Generate =
     let private prepareAndRun (config : Config) (case : BenchmarkCase) (doRun : bool) (cleanup : bool) =
         let codebase = prepareCodebase config case
         let inputs = generateInputs case codebase.Path
+        log.LogInformation("Serializing generated inputs")
         let serialized = serializeInputs inputs
         let inputsPath = makeInputsPath codebase.Path
         log.LogInformation $"Saving inputs as {inputsPath}"        
@@ -398,18 +309,32 @@ module Generate =
                     Config.RunnerProjectPath = Path.Combine(Environment.CurrentDirectory, args.BenchmarkPath)
                 }
             let case =
-                use _ = Log.log.BeginScope("Read input")
+                use _ = log.BeginScope("Read input")
                 try
                     let path = args.Input
                     path
                     |> File.ReadAllText
                     |> JsonConvert.DeserializeObject<BenchmarkCase>
+                    |> fun case ->
+                            let defaultCodebasePrep =
+                                [
+                                    {
+                                        CodebasePrepStep.Command = "dotnet"
+                                        CodebasePrepStep.Args = $"restore {case.SlnRelative}"
+                                    }
+                                ]
+                            let codebasePrep =
+                                match obj.ReferenceEquals(case.CodebasePrep, null) with
+                                | true -> defaultCodebasePrep
+                                | false -> case.CodebasePrep
+                            
+                            { case with CodebasePrep = codebasePrep }
                 with e ->
                     let msg = $"Failed to read inputs file: {e.Message}"
                     log.LogCritical(msg)
                     reraise()
             
-            use _ = Log.log.BeginScope("PrepareAndRun")
+            use _ = log.BeginScope("PrepareAndRun")
             prepareAndRun config case args.Run args.Cleanup
             0
         | _ ->

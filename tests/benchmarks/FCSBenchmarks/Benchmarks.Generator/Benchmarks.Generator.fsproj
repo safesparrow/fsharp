@@ -10,8 +10,7 @@
         <Content Include="inputs\local_example.json" />
         <Content Include="inputs\50_leaves.json" />
         <Content Include="inputs\fantomas.json" />
-        <Content Include="inputs\fantomas2.json" />
-        <Content Include="README.md" />
+        <None Include="README.md" />
     </ItemGroup>
     <ItemGroup>
       <PackageReference Include="CommandLineParser.FSharp" Version="2.9.1" />

@@ -8,11 +8,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Runner.fs" />
-        <Content Include="README.md" />
         <Compile Include="..\Benchmarks.Generator\Dtos.fs">
           <Link>Dtos.fs</Link>
         </Compile>
+        <Compile Include="Runner.fs" />
     </ItemGroup>
 
     <ItemGroup>
@@ -20,7 +19,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="FsPickler" Version="5.3.2" />
       <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     </ItemGroup>
 

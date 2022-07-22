@@ -4,77 +4,15 @@ open System
 open System.Diagnostics
 open System.IO
 open FSharp.Compiler.CodeAnalysis
-open Newtonsoft.Json
 open Benchmarks.Common.Dtos
-
-// member bc.ParseAndCheckFileInProject(fileName: string, fileVersion, sourceText: ISourceText, options: FSharpProjectOptions, userOpName) =
-type AnalyseFile =
-    {
-        FileName: string
-        FileVersion: int
-        SourceText: string
-        Options: FSharpProjectOptions
-    }
-
-type BenchmarkAction =
-    | AnalyseFile of AnalyseFile
-    
-type BenchmarkInputs =
-    {
-        Actions : BenchmarkAction list
-        Config : BenchmarkConfig
-    }
-        
-module Deserialization =
-
-    let rec private optionsFromDto (o : FSharpProjectOptionsDto) : FSharpProjectOptions =       
-        let fakeRP (rp : FSharpReferenceDto) : FSharpReferencedProject =
-            let back = optionsFromDto rp.Options
-            FSharpReferencedProject.CreateFSharp(rp.OutputFile, back)
-        {
-            ProjectFileName = o.ProjectFileName
-            ProjectId = o.ProjectId
-            SourceFiles = o.SourceFiles
-            OtherOptions = o.OtherOptions
-            ReferencedProjects =
-                o.ReferencedProjects
-                |> Array.map fakeRP
-            IsIncompleteTypeCheckEnvironment = o.IsIncompleteTypeCheckEnvironment
-            UseScriptResolutionRules = o.UseScriptResolutionRules
-            LoadTime = o.LoadTime
-            UnresolvedReferences = None
-            OriginalLoadReferences = []
-            Stamp = o.Stamp
-        }
-    
-    let private actionFromDto (dto : BenchmarkActionDto) =
-        match dto with
-        | BenchmarkActionDto.AnalyseFile x ->
-            {
-                AnalyseFile.FileName = x.FileName
-                FileVersion = x.FileVersion
-                SourceText = x.SourceText
-                Options = x.Options |> optionsFromDto
-            }
-            |> BenchmarkAction.AnalyseFile
-    
-    let private inputsFromDto (dto : BenchmarkInputsDto) =
-        {
-            BenchmarkInputs.Actions = dto.Actions |> List.map actionFromDto
-            Config = dto.Config
-        }
-            
-    let deserializeInputsJson (json : string) : BenchmarkInputs =
-        let settings = JsonSerializerSettings(PreserveReferencesHandling = PreserveReferencesHandling.All)
-        let dto = JsonConvert.DeserializeObject<BenchmarkInputsDto>(json, settings)
-        inputsFromDto dto
 
 type FCSBenchmark (config : BenchmarkConfig) =
     let checker = FSharpChecker.Create(projectCacheSize = config.ProjectCacheSize)
         
     let failOnErrors (results : FSharpCheckFileResults) =
-        () // TODO revert
-        //if results.Diagnostics.Length > 0 then failwithf $"had errors: %A{results.Diagnostics}"
+        printfn $"{results.Diagnostics.Length} diagnostics calculated:"
+        for d in results.Diagnostics do
+            printfn $"- {d.Message}"
     
     let performAction (action : BenchmarkAction) =
         let sw = Stopwatch.StartNew()
@@ -113,11 +51,11 @@ let run (inputs : BenchmarkInputs) =
 let main args =
     match args with
     | [|inputFile|] ->
-        File.WriteAllText(inputFile, File.ReadAllText(inputFile).Replace("FSharpOptions.Benchmarking+BenchmarkInputs", "Say+Benchmarking+BenchmarkInputs"))
         let json = File.ReadAllText(inputFile)
-        let inputs = Deserialization.deserializeInputsJson json
+        let inputs = deserializeInputs json
         run inputs
         0
     | _ ->
-        printfn $"Invalid args: %A{args}"; 1
+        printfn $"Invalid args: %A{args}. Expected format: 'dotnet run [input file.json]'"
+        1
     
