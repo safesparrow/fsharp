@@ -7,6 +7,7 @@ open System.Runtime.CompilerServices
 open System.Threading
 open Benchmarks.Common.Dtos
 open CommandLine
+open CommandLine.Text
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
@@ -288,47 +289,58 @@ module Generate =
             Cleanup : bool
         }
     
+    let run (args : Args) =
+        let config =
+            {
+                Config.CheckoutBaseDir = args.CheckoutsDir
+                Config.RunnerProjectPath = Path.Combine(Environment.CurrentDirectory, args.BenchmarkPath)
+            }
+        let case =
+            use _ = log.BeginScope("Read input")
+            try
+                let path = args.Input
+                path
+                |> File.ReadAllText
+                |> JsonConvert.DeserializeObject<BenchmarkCase>
+                |> fun case ->
+                        let defaultCodebasePrep =
+                            [
+                                {
+                                    CodebasePrepStep.Command = "dotnet"
+                                    CodebasePrepStep.Args = $"restore {case.SlnRelative}"
+                                }
+                            ]
+                        let codebasePrep =
+                            match obj.ReferenceEquals(case.CodebasePrep, null) with
+                            | true -> defaultCodebasePrep
+                            | false -> case.CodebasePrep
+                        
+                        { case with CodebasePrep = codebasePrep }
+            with e ->
+                let msg = $"Failed to read inputs file: {e.Message}"
+                log.LogCritical(msg)
+                reraise()
+        
+        use _ = log.BeginScope("PrepareAndRun")
+        prepareAndRun config case args.Run args.Cleanup
+    
+    let help result (errors : Error seq) =
+        let helpText =
+            let f (h:HelpText) =
+                h.AdditionalNewLineAfterOption <- false
+                h.Heading <- "FCS Benchmark Generator"
+                h
+            HelpText.AutoBuild(result, f, id)
+        printfn $"{helpText}"
+    
     [<EntryPoint>]
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let main args =
         printfn $"{Environment.CurrentDirectory}"
         let parseResult = Parser.Default.ParseArguments<Args> args
-        match parseResult.Tag with
-        | ParserResultType.Parsed ->
-            let args = parseResult.Value
-            let config =
-                {
-                    Config.CheckoutBaseDir = args.CheckoutsDir
-                    Config.RunnerProjectPath = Path.Combine(Environment.CurrentDirectory, args.BenchmarkPath)
-                }
-            let case =
-                use _ = log.BeginScope("Read input")
-                try
-                    let path = args.Input
-                    path
-                    |> File.ReadAllText
-                    |> JsonConvert.DeserializeObject<BenchmarkCase>
-                    |> fun case ->
-                            let defaultCodebasePrep =
-                                [
-                                    {
-                                        CodebasePrepStep.Command = "dotnet"
-                                        CodebasePrepStep.Args = $"restore {case.SlnRelative}"
-                                    }
-                                ]
-                            let codebasePrep =
-                                match obj.ReferenceEquals(case.CodebasePrep, null) with
-                                | true -> defaultCodebasePrep
-                                | false -> case.CodebasePrep
-                            
-                            { case with CodebasePrep = codebasePrep }
-                with e ->
-                    let msg = $"Failed to read inputs file: {e.Message}"
-                    log.LogCritical(msg)
-                    reraise()
-            
-            use _ = log.BeginScope("PrepareAndRun")
-            prepareAndRun config case args.Run args.Cleanup
-            0
-        | _ ->
-            1
+        parseResult
+            .WithParsed(fun args -> run args)
+            .WithNotParsed(fun errors -> help parseResult errors)
+        |> ignore
+        
+        if parseResult.Tag = ParserResultType.Parsed then 0 else 1

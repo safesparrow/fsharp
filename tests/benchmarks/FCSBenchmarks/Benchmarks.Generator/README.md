@@ -58,6 +58,17 @@ Let's look at [inputs/fantomas.json](inputs/fantomas.json):
     // Revision to use for 'git checkout' - using a commit hash rather than a branch/tag name guarantees reproducability
     "Revision" : "0fe6785076e045f28e4c88e6a57dd09b649ce671"
   },
+  // Commands to run to prepare a checked out codebase for `dotnet run`
+  "CodebasePrep": [
+    {
+      "Command": "dotnet",
+      "Args": "tool restore"
+    },
+    {
+      "Command": "dotnet",
+      "Args": "paket restore"
+    }
+  ],
   // Solution to open relative to the repo's root - all projects in the solution will be available in action definitions below
   "SlnRelative": "fantomas.sln",
   // A sequence of actions to be performed by FCS on the above codebase
