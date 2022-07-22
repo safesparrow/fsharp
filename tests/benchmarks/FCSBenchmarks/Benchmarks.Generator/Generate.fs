@@ -215,8 +215,8 @@ module Generate =
         
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let init (slnPath : string) =
-        let exe = FileInfo(@"D:\projekty\fsharp\.dotnet\dotnet.exe")
-        Init.init (DirectoryInfo(Path.GetDirectoryName slnPath)) (Some exe)
+        let exe = FileInfo(@"c:/program files/dotnet/dotnet.exe")//"D:\projekty\fsharp\.dotnet\dotnet.exe")
+        Init.init (DirectoryInfo(Path.GetDirectoryName slnPath)) None//(Some exe)
     
     type Config =
         {
@@ -256,15 +256,18 @@ module Generate =
         let loader = WorkspaceLoader.Create(toolsPath, props)
         let bl = BinaryLogGeneration.Within(DirectoryInfo("d:/.artifacts/binlogs"))//Path.GetDirectoryName sln))
         
-        let slnA = Ionide.ProjInfo.Sln.Construction.SolutionFile.Parse sln
+        let slnA = SolutionFile.Parse sln
         let projectsA =
             slnA.ProjectsInOrder
             |> Seq.filter (fun p -> p.ProjectType = SolutionProjectType.KnownToBeMSBuildFormat)
-            |> Seq.map (fun p -> p.ProjectName)
+            |> Seq.map (fun p -> p.AbsolutePath)
             |> Seq.toList
         let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
+        loader.Notifications.Add(fun x ->
+            printfn $"{x.ProjFile}: {x.DebugPrint}"
+            )
+        
         let projects = loader.LoadSln(sln, [], bl) |> Seq.toList
-        let projectsA = loader.LoadProjects(projectsA, [], bl) |> Seq.toList
         log.LogInformation $"{projects.Length} projects loaded"
         if projects.Length = 0 then
             failwith $"No projects were loaded from {sln} - this indicates an error in cracking the projects"
