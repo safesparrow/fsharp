@@ -3,7 +3,6 @@
 module FSharp.Compiler.BuildGraph
 
 open System
-open System.Collections.Generic
 open System.Threading
 open System.Threading.Tasks
 open System.Diagnostics
@@ -183,34 +182,6 @@ type NodeCode private () =
 
             return results.ToArray()
         }
-    
-    static member Parallel(degree : int) (asyn : bool) (computations: NodeCode<'T> seq) =
-        if asyn = false then
-            let opt =  ParallelOptions()
-            opt.MaxDegreeOfParallelism <- degree
-            computations
-            |> Seq.map (fun (Node x) -> x)
-            |> fun jobs -> (
-                jobs
-                |> fun jobs ->
-                    async {
-                        let o : obj = obj()
-                        let results = List<'T>()
-                        Parallel.ForEach(jobs, opt, fun job ->
-                            let res = job |> Async.RunSynchronously
-                            lock o (
-                                fun () -> results.Add(res)
-                            )
-                        ) |> ignore
-                        return results |> Seq.toArray
-                    }
-            )
-            |> Node
-        else
-            computations
-            |> Seq.map (fun (Node x) -> x)
-            |> fun j -> Async.Parallel(j, degree)
-            |> Node
 
 type private AgentMessage<'T> = GetValue of AsyncReplyChannel<Result<'T, Exception>> * callerCancellationToken: CancellationToken
 

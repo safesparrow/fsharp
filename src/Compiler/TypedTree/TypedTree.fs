@@ -36,10 +36,6 @@ type Stamp = int64
 
 type StampMap<'T> = Map<Stamp, 'T>
 
-
-module XX =
-    let inline notNull value = not (obj.ReferenceEquals(value, null))
-
 [<RequireQualifiedAccess>]
 type ValInline =
 
@@ -1038,7 +1034,7 @@ type Entity =
 
 
     /// Indicates if the entity is linked to backing data. Only used during unpickling of F# metadata.
-    member x.IsLinked = match XX.notNull x.entity_attribs with false -> false | _ -> true 
+    member x.IsLinked = match box x.entity_attribs with null -> false | _ -> true 
 
     /// Get the blob of information associated with an F# object-model type definition, i.e. class, interface, struct etc.
     member x.FSharpObjectModelTypeInfo = 
@@ -2250,8 +2246,8 @@ type Typar =
     /// Links a previously unlinked type variable to the given data. Only used during unpickling of F# metadata.
     member x.AsType = 
         let ty = x.typar_astype
-        match XX.notNull ty with 
-        | false -> 
+        match box ty with 
+        | null -> 
             let ty2 = TType_var (x, 0uy)
             x.typar_astype <- ty2
             ty2
@@ -3088,7 +3084,7 @@ type Val =
         | None -> ()
 
     /// Indicates if a value is linked to backing data yet. Only used during unpickling of F# metadata.
-    member x.IsLinked = match XX.notNull x.val_logical_name with false -> false | _ -> true 
+    member x.IsLinked = match box x.val_logical_name with null -> false | _ -> true 
 
     [<DebuggerBrowsable(DebuggerBrowsableState.Never)>]
     member x.DebugText = x.ToString()
@@ -3327,7 +3323,7 @@ type NonLocalEntityRef =
     member x.DebugText = x.ToString()
 
     override x.ToString() = x.DisplayName
-
+        
 [<NoEquality; NoComparison; StructuredFormatDisplay("{DebugText}")>]
 type EntityRef = 
     {
@@ -3339,10 +3335,10 @@ type EntityRef =
     }
 
     /// Indicates if the reference is a local reference
-    member x.IsLocalRef = match XX.notNull x.nlr with false -> true | _ -> false
+    member x.IsLocalRef = match box x.nlr with null -> true | _ -> false
 
     /// Indicates if the reference has been resolved
-    member x.IsResolved = match XX.notNull x.binding with false -> false | _ -> true
+    member x.IsResolved = match box x.binding with null -> false | _ -> true
 
     /// The resolved target of the reference
     member x.ResolvedTarget = x.binding
@@ -3359,25 +3355,25 @@ type EntityRef =
     /// Dereference the TyconRef to a Tycon. Amortize the cost of doing this.
     /// This path should not allocate in the amortized case
     member tcr.Deref = 
-        match XX.notNull tcr.binding with 
-        | false ->
+        match box tcr.binding with 
+        | null ->
             tcr.Resolve(canError=true)
-            match XX.notNull tcr.binding with 
-            | false -> error (InternalUndefinedItemRef (FSComp.SR.tastUndefinedItemRefModuleNamespaceType, String.concat "." tcr.nlr.EnclosingMangledPath, tcr.nlr.AssemblyName, tcr.nlr.LastItemMangledName))
+            match box tcr.binding with 
+            | null -> error (InternalUndefinedItemRef (FSComp.SR.tastUndefinedItemRefModuleNamespaceType, String.concat "." tcr.nlr.EnclosingMangledPath, tcr.nlr.AssemblyName, tcr.nlr.LastItemMangledName))
             | _ -> tcr.binding
-        | true -> 
+        | _ -> 
             tcr.binding
 
     /// Dereference the TyconRef to a Tycon option.
     member tcr.TryDeref = 
-        match XX.notNull tcr.binding with 
-        | false -> 
+        match box tcr.binding with 
+        | null -> 
             tcr.Resolve(canError=false)
-            match XX.notNull tcr.binding with 
-            | false -> ValueNone
+            match box tcr.binding with 
+            | null -> ValueNone
             | _ -> ValueSome tcr.binding
 
-        | true -> 
+        | _ -> 
             ValueSome tcr.binding
 
     /// Is the destination assembly available?
@@ -5463,8 +5459,8 @@ type CcuThunk =
     /// Fixup a CCU to have the given contents
     member x.Fixup(avail: CcuThunk) = 
 
-        match XX.notNull x.target with
-        | false -> ()
+        match box x.target with
+        | null -> ()
         | _ -> 
             // In the IDE we tolerate a double-fixup of FSHarp.Core when editing the FSharp.Core project itself
             if x.AssemblyName <> "FSharp.Core" then 
@@ -5472,8 +5468,8 @@ type CcuThunk =
 
         assert (avail.AssemblyName = x.AssemblyName)
         x.target <- 
-            match XX.notNull avail.target with
-            | false -> error(Failure("internal error: ccu thunk '"+avail.name+"' not fixed up!"))
+            match box avail.target with
+            | null -> error(Failure("internal error: ccu thunk '"+avail.name+"' not fixed up!"))
             | _ -> avail.target
 
     /// Try to resolve a path into the CCU by referencing the .NET/CLI type forwarder table of the CCU
