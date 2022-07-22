@@ -35,7 +35,7 @@ graph LR;
 ## How to use it
 ### Run `Benchmark.Generator` to generate and run the benchmark
 ```bash
-dotnet run Benchmark.Generator - 
+dotnet run -i inputs/50_leaves.json 
 ```
 
 ## Benchmark description format

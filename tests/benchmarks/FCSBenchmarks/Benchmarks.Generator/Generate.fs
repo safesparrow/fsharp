@@ -258,20 +258,12 @@ module Generate =
         File.WriteAllText(inputsPath, serialized)
         
         if doRun then
-            use _ = log.BeginScope $"Run"
-            log.LogInformation $"Starting the benchmark..."
+            use _ = log.BeginScope "Run"
+            log.LogInformation "Starting the benchmark..."
             let workingDir = Path.GetDirectoryName(config.RunnerProjectPath)
-            let envVariables =
-                emptyProjInfoEnvironmentVariables()
-                @ [
-                    "Platform", "x64"
-                ]
-            log.LogInformation($"Running {config} codebase preparation steps:")
-            log.LogInformation("Building runner project...")
-            Utils.runProcess "dotnet" $"build -c Release Benchmarks.Runner.fsproj" workingDir envVariables true
-            log.LogInformation("**** Runner project built. Running benchmark...")
-            let projFullPath = Path.Combine(workingDir, "Benchmarks.Runner.fsproj")
-            Utils.runProcess "dotnet" $"run -c Release --no-restore --project {projFullPath} -- {inputsPath}" workingDir envVariables true
+            let envVariables = emptyProjInfoEnvironmentVariables() 
+            log.LogInformation("Running the benchmark...")
+            Utils.runProcess "dotnet" $"run -c Release -- {inputsPath}" workingDir envVariables true
         else
             log.LogInformation $"Not running the benchmark as requested"
             
@@ -284,9 +276,9 @@ module Generate =
     
     type Args =
         {
-            [<CommandLine.Option('c', Default = "d:/.artifacts", HelpText = "Base directory for git checkouts")>]
+            [<CommandLine.Option('c', Default = ".artifacts", HelpText = "Base directory for git checkouts")>]
             CheckoutsDir : string
-            [<CommandLine.Option('b', Default = "../../../../Benchmarks.Runner/Benchmarks.Runner.fsproj", HelpText = "Path to the benchmark runner project - defaults to '../Benchmarks.Runner/Benchmarks.Runner.fsproj'")>]
+            [<CommandLine.Option('b', Default = "../Benchmarks.Runner/Benchmarks.Runner.fsproj", HelpText = "Path to the benchmark runner project - defaults to '../Benchmarks.Runner/Benchmarks.Runner.fsproj'")>]
             BenchmarkPath : string
             [<CommandLine.Option('i', Required = true, HelpText = "Path to the input file describing the benchmark")>]
             Input : string
@@ -299,6 +291,7 @@ module Generate =
     [<EntryPoint>]
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let main args =
+        printfn $"{Environment.CurrentDirectory}"
         let parseResult = Parser.Default.ParseArguments<Args> args
         match parseResult.Tag with
         | ParserResultType.Parsed ->

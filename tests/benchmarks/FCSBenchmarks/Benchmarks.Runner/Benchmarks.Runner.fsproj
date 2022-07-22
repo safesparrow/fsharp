@@ -5,6 +5,7 @@
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>exe</OutputType>
         <RootNamespace>BenchmarkRunner</RootNamespace>
+        <Configurations>Release</Configurations>
     </PropertyGroup>
 
     <ItemGroup>
@@ -15,7 +16,11 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\..\..\src\Compiler\FSharp.Compiler.Service.fsproj" />
+        <!-- It's hard to avoid recompiling FCS every time the benchmark is run.
+             To avoid that we reference the dll directly -->
+        <Reference Include="FSharp.Compiler.Service">
+            <HintPath>$(ArtifactsBinDir)\FSharp.Compiler.Service\$(Configuration)\netstandard2.0\FSharp.Compiler.Service.dll</HintPath>
+        </Reference>
     </ItemGroup>
 
     <ItemGroup>
