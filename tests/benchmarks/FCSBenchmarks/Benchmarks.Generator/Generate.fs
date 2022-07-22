@@ -1,4 +1,4 @@
-﻿module BenchmarkGenerator
+﻿module BenchmarkGenerator.Generate
 
 open System
 open System.Diagnostics
@@ -8,6 +8,7 @@ open BenchmarkGenerator.Dto
 open CommandLine
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
+open Ionide.ProjInfo.Sln.Construction
 open Ionide.ProjInfo.Types
 open Microsoft.Extensions.Logging
 open Newtonsoft.Json
@@ -17,7 +18,7 @@ module Log =
     let private loggerFactory = LoggerFactory.Create(
         fun builder ->
             builder.AddSimpleConsole(fun options ->
-                options.IncludeScopes <- true
+                options.IncludeScopes <- false
                 options.SingleLine <- true
                 options.TimestampFormat <- "HH:mm:ss.fff"
             )
@@ -226,7 +227,7 @@ module Generate =
     type Codebase =
         | Local of string
         | Git of LibGit2Sharp.Repository
-        with member this.Path = match this with | Local codeRoot -> codeRoot | Git repo -> repo.Info.Path 
+        with member this.Path = match this with | Local codeRoot -> codeRoot | Git repo -> repo.Info.WorkingDirectory
     
     let prepareCodebase (config : Config) (case : BenchmarkCase) : Codebase =
         use _ = Log.log.BeginScope("PrepareCodebase")
@@ -248,15 +249,25 @@ module Generate =
         // TODO allow customization of build properties
         let props =
             [
-                "Configuration", "Debug"
-                "TargetPlatform", "x64"
-                "Platform", "x64"
+                // "Configuration", "Debug"
+                // "TargetPlatform", "x64"
+                // "Platform", "x64"
             ]
         let loader = WorkspaceLoader.Create(toolsPath, props)
-        let bl = BinaryLogGeneration.Within(DirectoryInfo(Path.GetDirectoryName sln))
+        let bl = BinaryLogGeneration.Within(DirectoryInfo("d:/.artifacts/binlogs"))//Path.GetDirectoryName sln))
         
+        let slnA = Ionide.ProjInfo.Sln.Construction.SolutionFile.Parse sln
+        let projectsA =
+            slnA.ProjectsInOrder
+            |> Seq.filter (fun p -> p.ProjectType = SolutionProjectType.KnownToBeMSBuildFormat)
+            |> Seq.map (fun p -> p.ProjectName)
+            |> Seq.toList
+        let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
         let projects = loader.LoadSln(sln, [], bl) |> Seq.toList
+        let projectsA = loader.LoadProjects(projectsA, [], bl) |> Seq.toList
         log.LogInformation $"{projects.Length} projects loaded"
+        if projects.Length = 0 then
+            failwith $"No projects were loaded from {sln} - this indicates an error in cracking the projects"
         
         let fsOptions =
             projects
@@ -266,10 +277,13 @@ module Generate =
     
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let private loadOptions (sln : string) =
+        use _ = log.BeginScope("LoadOptions")
+        log.LogInformation($"Constructing FSharpProjectOptions from {sln}")
         let toolsPath = init sln
         doLoadOptions toolsPath sln
     
     let private serializeInputs (inputs : BenchmarkInputs) : string =
+        log.LogInformation("Serializing generated inputs")
         let dto = inputs |> Serialization.inputsToJson
         dto |> JsonConvert.SerializeObject
     
@@ -277,6 +291,7 @@ module Generate =
         let sln = Path.Combine(codeRoot, case.SlnRelative)
         let options = loadOptions sln
         
+        log.LogInformation("Generating actions")
         let actions =
             case.CheckActions
             |> List.mapi (fun i {FileName = projectRelativeFileName; ProjectName = projectName} ->
@@ -321,11 +336,12 @@ module Generate =
         let inputs = generateInputs config case codebase.Path
         let serialized = serializeInputs inputs
         let inputsPath = makeInputsPath codebase.Path
+        log.LogInformation $"Saving inputs as {inputsPath}"        
         Directory.CreateDirectory(Path.GetDirectoryName(inputsPath)) |> ignore
         File.WriteAllText(inputsPath, serialized)
-        log.LogInformation $"Inputs saved in {inputsPath}"
         
         if doRun then
+            use _ = log.BeginScope $"Run"
             log.LogInformation $"Starting the benchmark..."
             let workingDir = Path.GetDirectoryName(config.RunnerProjectPath)
             let envVariables = emptyProjInfoEnvironmentVariables()
@@ -337,11 +353,12 @@ module Generate =
         | Local root, _ -> ()
         | Git repo, false -> ()
         | Git repo, true ->
+            log.LogInformation $"Cleaning up checked out git repo {repo.Info.Path} as requested"
             Directory.Delete repo.Info.Path
     
     type Args =
         {
-            [<CommandLine.Option('c', Default = ".artifacts", HelpText = "Base directory for git checkouts")>]
+            [<CommandLine.Option('c', Default = "d:/.artifacts", HelpText = "Base directory for git checkouts")>]
             CheckoutsDir : string
             [<CommandLine.Option('b', Default = "../Benchmarks.Runner/Benchmarks.Runner.fsproj", HelpText = "Path to the benchmark runner project - defaults to '../Benchmarks.Runner/Benchmarks.Runner.fsproj'")>]
             BenchmarkPath : string
