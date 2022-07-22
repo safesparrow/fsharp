@@ -10,11 +10,13 @@
     <ItemGroup>
         <Compile Include="Runner.fs" />
         <Content Include="README.md" />
+        <Compile Include="..\Benchmarks.Generator\Dtos.fs">
+          <Link>Dtos.fs</Link>
+        </Compile>
     </ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\..\..\..\src\Compiler\FSharp.Compiler.Service.fsproj" />
-      <ProjectReference Include="..\CheckerBenchmark.Dto\CheckerBenchmark.Dto.fsproj" />
     </ItemGroup>
 
     <ItemGroup>

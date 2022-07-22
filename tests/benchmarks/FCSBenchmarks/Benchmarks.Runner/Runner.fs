@@ -1,11 +1,11 @@
-﻿module BenchmarkRunner
+﻿module Benchmarks.Runner
 
 open System
 open System.Diagnostics
 open System.IO
-open CheckerBenchmark.Dto
 open FSharp.Compiler.CodeAnalysis
 open Newtonsoft.Json
+open Benchmarks.Common.Dtos
 
 // member bc.ParseAndCheckFileInProject(fileName: string, fileVersion, sourceText: ISourceText, options: FSharpProjectOptions, userOpName) =
 type AnalyseFile =

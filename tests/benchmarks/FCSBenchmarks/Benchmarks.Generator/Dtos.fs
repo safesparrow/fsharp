@@ -1,13 +1,9 @@
-﻿module BenchmarkGenerator.Dto
+﻿/// This file is shared between Benchmarks.Generator that serializes inputs using these DTO types,
+/// and Benchmarks.Runner that deserializes them using these DTO types.
+/// It's shared via link rather than a library due to problems in referencing a separate project in Benchmarks.Generator
+module Benchmarks.Common.Dtos
 
 open System
-
-[<CLIMutable>]
-type RangeDto =
-    {
-        Code1 : int64
-        Code2 : int64
-    }
 
 [<CLIMutable>]
 type FSharpReferenceDto =

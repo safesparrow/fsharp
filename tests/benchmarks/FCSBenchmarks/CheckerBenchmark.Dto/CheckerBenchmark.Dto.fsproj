@@ -5,8 +5,4 @@
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
     </PropertyGroup>
 
-    <ItemGroup>
-        <Compile Include="Dto.fs" />
-    </ItemGroup>
-
 </Project>

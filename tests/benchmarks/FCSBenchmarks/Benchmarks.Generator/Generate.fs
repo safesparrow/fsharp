@@ -1,14 +1,14 @@
-﻿module BenchmarkGenerator.Generate
+﻿module Benchmarks.Generator.Generate
 
 open System
 open System.Diagnostics
 open System.IO
 open System.Runtime.CompilerServices
-open BenchmarkGenerator.Dto
+open System.Threading
+open Benchmarks.Common.Dtos
 open CommandLine
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
-open Ionide.ProjInfo.Sln.Construction
 open Ionide.ProjInfo.Types
 open Microsoft.Extensions.Logging
 open Newtonsoft.Json
@@ -55,10 +55,17 @@ module Utils =
         if p.ExitCode <> 0 then
             let msg = $"Process {name} {args} failed: {errors}."
             log.LogError $"{msg}. Its full output:"
+            Thread.Sleep(100) // A rather hacky way to make sure that the above log is flushed before the long message below
+            Console.ForegroundColor <- ConsoleColor.Gray
             printfn $"{o}"
+            Console.ResetColor()
             failwith msg
         else if printOutput then
-            log.LogInformation ("Full output of the process:" + Environment.NewLine + o)
+            log.LogInformation "Full output of the process:"
+            Thread.Sleep(100) // A rather hacky way to make sure that the above log is flushed before the long message below
+            Console.ForegroundColor <- ConsoleColor.DarkGray
+            printfn $"{o}"
+            Console.ResetColor()
 
 /// Handling Git operations
 [<RequireQualifiedAccess>]
@@ -222,8 +229,7 @@ module Generate =
         
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let init (slnPath : string) =
-        let exe = FileInfo(@"c:/program files/dotnet/dotnet.exe")//"D:\projekty\fsharp\.dotnet\dotnet.exe")
-        Init.init (DirectoryInfo(Path.GetDirectoryName slnPath)) None//(Some exe)
+        Init.init (DirectoryInfo(Path.GetDirectoryName slnPath)) None
     
     type Config =
         {
@@ -241,12 +247,12 @@ module Generate =
         let codebase =
             match (case.Repo :> obj, case.LocalCodeRoot) with
             | null, null -> failwith "Either git repo or local code root details are required"
-            | repo, null ->
+            | _, null ->
                 let repo = RepoSetup.prepare {BaseDir = config.CheckoutBaseDir} case.Repo
                 Codebase.Git repo
             | null, codeRoot ->
                 Codebase.Local codeRoot
-            | repo, codeRoot -> failwith $"Both git repo and local code root were provided - that's not supported"
+            | _, _ -> failwith $"Both git repo and local code root were provided - that's not supported"
         let sln = Path.Combine(codebase.Path, case.SlnRelative)
         log.LogInformation($"Running {case.CodebasePrep.Length} codebase prep steps...")
         case.CodebasePrep
@@ -261,23 +267,10 @@ module Generate =
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let private doLoadOptions (toolsPath : ToolsPath) (sln : string) =
         // TODO allow customization of build properties
-        let props =
-            [
-                // "Configuration", "Debug"
-                // "TargetPlatform", "x64"
-                // "Platform", "x64"
-            ]
+        let props = []
         let loader = WorkspaceLoader.Create(toolsPath, props)
-        let bl = BinaryLogGeneration.Within(DirectoryInfo("d:/.artifacts/binlogs"))//Path.GetDirectoryName sln))
-        
-        let slnA = SolutionFile.Parse sln
-        let projectsA =
-            slnA.ProjectsInOrder
-            |> Seq.filter (fun p -> p.ProjectType = SolutionProjectType.KnownToBeMSBuildFormat)
-            |> Seq.map (fun p -> p.AbsolutePath)
-            |> Seq.toList
         let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()        
-        let projects = loader.LoadSln(sln, [], bl) |> Seq.toList
+        let projects = loader.LoadSln(sln, [], BinaryLogGeneration.Off) |> Seq.toList
         log.LogInformation $"{projects.Length} projects loaded"
         if projects.Length = 0 then
             failwith $"No projects were loaded from {sln} - this indicates an error in cracking the projects"
@@ -300,7 +293,7 @@ module Generate =
         let dto = inputs |> Serialization.inputsToJson
         dto |> JsonConvert.SerializeObject
     
-    let private generateInputs (config : Config) (case : BenchmarkCase) (codeRoot : string) =
+    let private generateInputs (case : BenchmarkCase) (codeRoot : string) =
         let sln = Path.Combine(codeRoot, case.SlnRelative)
         let options = loadOptions sln
         
@@ -346,7 +339,7 @@ module Generate =
     
     let private prepareAndRun (config : Config) (case : BenchmarkCase) (doRun : bool) (cleanup : bool) =
         let codebase = prepareCodebase config case
-        let inputs = generateInputs config case codebase.Path
+        let inputs = generateInputs case codebase.Path
         let serialized = serializeInputs inputs
         let inputsPath = makeInputsPath codebase.Path
         log.LogInformation $"Saving inputs as {inputsPath}"        
@@ -372,8 +365,8 @@ module Generate =
             log.LogInformation $"Not running the benchmark as requested"
             
         match codebase, cleanup with
-        | Local root, _ -> ()
-        | Git repo, false -> ()
+        | Local _, _ -> ()
+        | Git _, false -> ()
         | Git repo, true ->
             log.LogInformation $"Cleaning up checked out git repo {repo.Info.Path} as requested"
             Directory.Delete repo.Info.Path
