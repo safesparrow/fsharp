@@ -504,6 +504,10 @@ type BackgroundCompiler
             if ct.IsCancellationRequested then
                 GraphNode(node.Return(None, [||]))
             else
+                Logger.LogMessage
+                    $"createBuilderNode for {options.ProjectFileName}, on thread {Thread.CurrentThread.ManagedThreadId}"
+                    LogCompilerFunctionId.Service_IncrementalBuildersCache_BuildingNewCache
+                
                 let getBuilderNode = GraphNode(CreateOneIncrementalBuilder(options, userOpName))
                 incrementalBuildersCache.Set(AnyCallerThread, options, getBuilderNode)
                 getBuilderNode)
