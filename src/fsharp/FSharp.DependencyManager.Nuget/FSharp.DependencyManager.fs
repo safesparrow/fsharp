@@ -201,9 +201,7 @@ type FSharpDependencyManager (outputDirectory:string option) =
     let deleteScripts () =
         try
 #if !DEBUG
-            if workingDirectory.IsValueCreated then
-                if Directory.Exists(workingDirectory.Value) then
-                    Directory.Delete(workingDirectory.Value, true)
+            ()
 #else
             ()
 #endif

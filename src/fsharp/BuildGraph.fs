@@ -154,6 +154,12 @@ type NodeCode private () =
                 results.Add(res)
             return results.ToArray()
         }
+        
+    static member Parallel (computations: NodeCode<'T> seq) =
+        computations
+        |> Seq.map (fun (Node x) -> x)
+        |> Async.Parallel
+        |> Node
 
 type private AgentMessage<'T> =
     | GetValue of AsyncReplyChannel<Result<'T, Exception>> * callerCancellationToken: CancellationToken

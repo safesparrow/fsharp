@@ -1681,12 +1681,26 @@ and [<Sealed>] TcImports(tcConfigP: TcConfigProvider, initialResolutions: TcAsse
                     tcImports.PrepareToImportReferencedILAssembly (ctok, m, filename, dllinfo)
             return Some(dllinfo, phase2)
          }
-
+    
     // NOTE: When used in the Language Service this can cause the transitive checking of projects. Hence it must be cancellable.
     member tcImports.RegisterAndImportReferencedAssemblies (ctok, nms: AssemblyResolution list) =
       node {
         CheckDisposed()
 
+        // TODO inject top-down from FSharpChecker
+        let runInParallel =
+            Environment.GetEnvironmentVariable("FCS_PARALLEL_PROJECTS_ANALYSIS")
+            |> bool.TryParse
+            |> function
+                | true, runInParallel -> runInParallel
+                | false, _ -> false
+
+        let runMethod =
+            if runInParallel then
+                NodeCode.Parallel
+            else
+                NodeCode.Sequential
+        
         let! results =
             nms
             |> List.map (fun nm -> 
@@ -1698,7 +1712,7 @@ and [<Sealed>] TcImports(tcConfigP: TcConfigProvider, initialResolutions: TcAsse
                          return None
                 }
             )
-            |> NodeCode.Sequential
+            |> runMethod
 
         let dllinfos, phase2s = results |> Array.choose id |> List.ofArray |> List.unzip
         fixupOrphanCcus()
