@@ -993,6 +993,16 @@ type BackgroundCompiler(
 
     static member ActualCheckFileCount = actualCheckFileCount
 
+let tracerProvider =
+    lazy {
+        Sdk.CreateTracerProviderBuilder()
+           .AddSource(activitySourceName)
+           .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName ="program", serviceVersion = "42.42.42.44"))
+           // .AddOtlpExporter()
+           // .AddZipkinExporter()
+           .AddJaegerExporter()
+           .Build()
+    }
 
 [<Sealed; AutoSerializable(false)>]
 // There is typically only one instance of this type in an IDE process.
@@ -1005,7 +1015,9 @@ type FSharpChecker(legacyReferenceResolver,
                     keepAllBackgroundSymbolUses,
                     enableBackgroundItemKeyStoreAndSemanticClassification,
                     enablePartialTypeChecking) =
-
+    
+    let mainActivity = activitySource.StartActivity("main")
+    
     let backgroundCompiler =
         BackgroundCompiler(
             legacyReferenceResolver,
@@ -1234,17 +1246,29 @@ type FSharpChecker(legacyReferenceResolver,
 
     /// Typecheck a source code file, returning a handle to the results of the 
     /// parse including the reconstructed types in the file.
-    member _.CheckFileInProject(parseResults:FSharpParseFileResults, filename:string, fileVersion:int, sourceText:ISourceText, options:FSharpProjectOptions, ?userOpName: string) =        
-        let userOpName = defaultArg userOpName "Unknown"
-        backgroundCompiler.CheckFileInProject(parseResults,filename,fileVersion,sourceText,options,userOpName)
-        |> Async.AwaitNodeCode
+    member _.CheckFileInProject(parseResults:FSharpParseFileResults, filename:string, fileVersion:int, sourceText:ISourceText, options:FSharpProjectOptions, ?userOpName: string) =
+        async {
+            use act = activitySource.StartActivity("CheckFileInProject")
+            act.AddTag("Project", options.ProjectFileName) |> ignore
+            act.AddTag("filename", filename) |> ignore
+            let userOpName = defaultArg userOpName "Unknown"
+            return!
+                backgroundCompiler.CheckFileInProject(parseResults,filename,fileVersion,sourceText,options,userOpName)
+                |> Async.AwaitNodeCode
+        }
 
     /// Typecheck a source code file, returning a handle to the results of the 
     /// parse including the reconstructed types in the file.
-    member _.ParseAndCheckFileInProject(filename:string, fileVersion:int, sourceText:ISourceText, options:FSharpProjectOptions, ?userOpName: string) =        
-        let userOpName = defaultArg userOpName "Unknown"
-        backgroundCompiler.ParseAndCheckFileInProject(filename, fileVersion, sourceText, options, userOpName)
-        |> Async.AwaitNodeCode
+    member _.ParseAndCheckFileInProject(filename:string, fileVersion:int, sourceText:ISourceText, options:FSharpProjectOptions, ?userOpName: string) =
+        async {
+            use mainActivity = activitySource.StartActivity("CheckFileInProject")
+            act.AddTag("Project", options.ProjectFileName) |> ignore
+            act.AddTag("filename", filename) |> ignore
+            let userOpName = defaultArg userOpName "Unknown"
+            return!
+                backgroundCompiler.ParseAndCheckFileInProject(filename, fileVersion, sourceText, options, userOpName)
+                |> Async.AwaitNodeCode
+        }
             
     member _.ParseAndCheckProject(options, ?userOpName: string) =
         let userOpName = defaultArg userOpName "Unknown"
