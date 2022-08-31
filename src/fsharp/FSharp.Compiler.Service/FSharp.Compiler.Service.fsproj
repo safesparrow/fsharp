@@ -1014,6 +1014,7 @@
     <PackageReference Include="System.Collections.Immutable" Version="$(SystemCollectionsImmutableVersion)" />
     <PackageReference Include="System.Diagnostics.Process" Version="$(SystemDiagnosticsProcessVersion)" />
     <PackageReference Include="System.Diagnostics.TraceSource" Version="$(SystemDiagnosticsTraceSourceVersion)" />
+    <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="$(SystemdiagnosticsDiagnosticSourceVersion)" />
     <PackageReference Include="System.Linq.Expressions" Version="$(SystemLinqExpressionsVersion)" />
     <PackageReference Include="System.Linq.Queryable" Version="$(SystemLinqExpressionsVersion)" />
     <PackageReference Include="System.Net.Requests" Version="$(SystemNetRequestsVersion)" />

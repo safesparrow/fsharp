@@ -2,9 +2,14 @@
 
 namespace FSharp.Compiler.Diagnostics
 
+open System.Diagnostics
 open System.Diagnostics.Tracing
 open System
 
+module Activity =
+    let activitySourceName = "fsc"
+    let activitySource = new ActivitySource(activitySourceName)
+    
 type LogCompilerFunctionId =
     | Service_ParseAndCheckFileInProject = 1
     | Service_CheckOneFile = 2

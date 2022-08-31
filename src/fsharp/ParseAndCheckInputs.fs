@@ -827,6 +827,8 @@ let TypeCheckOneInput(checkForErrors,
 
     cancellable {
         try
+          use tcOneInputActivity = Activity.activitySource.StartActivity("CheckOneInput")
+          tcOneInputActivity.AddTag("inputName", inp.FileName) |> ignore<_>
           CheckSimulateException tcConfig
 
           let m = inp.Range

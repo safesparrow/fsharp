@@ -261,7 +261,11 @@ type BackgroundCompiler(
                             member x.EvaluateRawContents() = 
                               node {
                                 Trace.TraceInformation("FCS: {0}.{1} ({2})", userOpName, "GetAssemblyData", nm)
-                                return! self.GetAssemblyData(opts, userOpName + ".CheckReferencedProject("+nm+")")
+                                let act = FSharp.Compiler.Diagnostics.Activity.activitySource.StartActivity("CheckReferencedProject")
+                                act.AddTag("Project", nm) |> ignore
+                                let! assemblyData = self.GetAssemblyData(opts, userOpName + ".CheckReferencedProject(" + nm + ")")
+                                act.Dispose()
+                                return assemblyData
                               }
                             member x.TryGetLogicalTimeStamp(cache) = 
                                 self.TryGetLogicalTimeStampForProject(cache, opts)
