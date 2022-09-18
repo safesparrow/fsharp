@@ -13,7 +13,6 @@ open FSharp.Compiler.Symbols
 open FSharp.Compiler.Syntax
 open FSharp.Compiler.Text
 open TestFramework
-open FsUnit
 open NUnit.Framework
 open FSharp.Test.Utilities
 
@@ -403,22 +402,6 @@ let getSymbolFullName (symbol: FSharpSymbol) =
     | :? FSharpUnionCase as unioncase -> Some unioncase.FullName
     | :? FSharpField as field -> Some field.FullName
     | _ -> None
-
-let assertContainsSymbolWithName name source =
-    getSymbols source
-    |> Seq.choose getSymbolName
-    |> Seq.contains name
-    |> shouldEqual true
-
-let assertContainsSymbolsWithNames (names: string list) source =
-    let symbolNames =
-        getSymbols source
-        |> Seq.choose getSymbolName
-
-    for name in names do
-        symbolNames
-        |> Seq.contains name
-        |> shouldEqual true
 
 let assertHasSymbolUsages (names: string list) (results: FSharpCheckFileResults) =
     let symbolNames =

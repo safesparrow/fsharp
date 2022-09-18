@@ -5742,3 +5742,33 @@ let ``References from #r nuget are included in script project options`` () =
         |> Seq.distinct
     printfn "%s" (assemblyNames |> String.concat "\n")
     assemblyNames |> should contain "Dapper.dll"
+
+
+[<Test>]
+let ``PFiles``() =
+
+    let fileName1 = Path.ChangeExtension(tryCreateTemporaryFileName (), ".fs")
+    let base2 = tryCreateTemporaryFileName ()
+    let dllName = Path.ChangeExtension(base2, ".dll")
+    let projFileName = Path.ChangeExtension(base2, ".fsproj")
+    let fileSource1Text = """
+module Module
+open System
+let x = 3
+"""
+    let fileSource1 = SourceText.ofString fileSource1Text
+    FileSystem.OpenFileForWriteShim(fileName1).Write(fileSource1Text)
+
+    let fileNames = [fileName1]
+    let args = mkProjectCommandLineArgs (dllName, fileNames)
+    let keepAssemblyContentsChecker = FSharpChecker.Create(keepAssemblyContents=true)
+    let options =  keepAssemblyContentsChecker.GetProjectOptionsFromCommandLineArgs (projFileName, args)
+
+    let fileCheckResults =
+        keepAssemblyContentsChecker.ParseAndCheckFileInProject(fileName1, 0, fileSource1, options)  |> Async.RunImmediate
+        |> function
+            | _, FSharpCheckFileAnswer.Succeeded(res) -> res
+            | _ -> failwithf "Parsing aborted unexpectedly..."
+    let lines = FileSystem.OpenFileForReadShim(fileName1).ReadAllLines()
+    let unusedOpens = UnusedOpens.getUnusedOpens (fileCheckResults, (fun i -> lines[i-1])) |> Async.RunImmediate
+    ()
