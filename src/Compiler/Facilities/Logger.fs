@@ -13,8 +13,9 @@ module Activity =
 
     let Start name (tags:(string * #obj) seq) : IDisposable = 
             let act = activitySource.StartActivity(name)
-            for key,value in tags do
-                act.AddTag(key,value) |> ignore
+            if isNull act |> not then
+                for key,value in tags do
+                    act.AddTag(key,value) |> ignore
             act
 
     let StartNoTags name: IDisposable = activitySource.StartActivity(name)
