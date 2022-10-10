@@ -5,6 +5,7 @@ namespace FSharp.Compiler.Diagnostics
 open System
 open System.Diagnostics
 open System.Diagnostics.Tracing
+open Internal.Utilities.Library
 
 [<RequireQualifiedAccess>]
 module Activity =    
@@ -13,7 +14,7 @@ module Activity =
 
     let Start name (tags:(string * #obj) seq) : IDisposable = 
             let act = activitySource.StartActivity(name)
-            if isNull act |> not then
+            if isNotNull act then
                 for key,value in tags do
                     act.AddTag(key,value) |> ignore
             act
