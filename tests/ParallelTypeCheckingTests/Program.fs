@@ -2,7 +2,7 @@
 #nowarn "1182"
 open ParallelTypeCheckingTests.Utils
 
-let _parse (argv: string[]): Args =
+let parse (argv: string[]): Args =
     let parseMode (mode : string) =
         match mode.ToLower() with
         | "sequential" -> Method.Sequential
@@ -29,14 +29,7 @@ let _parse (argv: string[]): Args =
     }
 
 [<EntryPoint>]
-let main _argv =
-    let workDir, path, lineLimit = CompilationFromArgsTests.codebases[2]
-    let stuff =
-        {
-            Path = path
-            LineLimit = lineLimit
-            WorkingDir = Some workDir
-            Mode = Method.Nojaf
-        }
+let main argv =
+    let stuff = parse argv
     CompilationFromArgsTests.TestCompilerFromArgs stuff
     0
