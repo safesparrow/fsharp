@@ -1,3 +1,5 @@
 module B
 
-let b = "B"
+open A
+
+let b (a:AType) = ()

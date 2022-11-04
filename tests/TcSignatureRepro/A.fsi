@@ -1,3 +1,3 @@
 module A
 
-val a: string
+type AType = class end

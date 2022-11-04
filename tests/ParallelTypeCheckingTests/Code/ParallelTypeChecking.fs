@@ -177,6 +177,10 @@ module internal Real =
                         input,
                         false  // skipImpFiles...
                     )
+                    
+                    if logger.ErrorCount > 0 then
+                        printfn "errors affter %s" file.Name
+                        exit 1
             
                     printfn $"Finished Processing AST {file.Name}"
                     return

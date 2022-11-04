@@ -10,7 +10,10 @@
     <Compile Include="A.fs" />
     <Compile Include="B.fsi" />
     <Compile Include="B.fs" />
+    <Compile Include="C.fsi" />
     <Compile Include="C.fs" />
+    <Compile Include="D.fsi" />
+    <Compile Include="D.fs" />
     <Compile Include="Library.fs" />
   </ItemGroup>
 

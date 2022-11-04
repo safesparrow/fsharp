@@ -1,3 +1,5 @@
 module B
 
-val b: string
+open A
+
+val b: AType -> unit

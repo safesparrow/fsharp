@@ -215,5 +215,8 @@ C:\Users\nojaf\Projects\safesparrow-fsharp\tests\TcSignatureRepro\A.fsi
 C:\Users\nojaf\Projects\safesparrow-fsharp\tests\TcSignatureRepro\A.fs
 C:\Users\nojaf\Projects\safesparrow-fsharp\tests\TcSignatureRepro\B.fsi
 C:\Users\nojaf\Projects\safesparrow-fsharp\tests\TcSignatureRepro\B.fs
+C:\Users\nojaf\Projects\safesparrow-fsharp\tests\TcSignatureRepro\C.fsi
 C:\Users\nojaf\Projects\safesparrow-fsharp\tests\TcSignatureRepro\C.fs
+C:\Users\nojaf\Projects\safesparrow-fsharp\tests\TcSignatureRepro\D.fsi
+C:\Users\nojaf\Projects\safesparrow-fsharp\tests\TcSignatureRepro\D.fs
 C:\Users\nojaf\Projects\safesparrow-fsharp\tests\TcSignatureRepro\Library.fs

@@ -1,3 +1,3 @@
 module A
 
-let a = "A"
+type AType = class end
