@@ -115,12 +115,85 @@ open A
 """
         ] |> FProject.Make  CompileOutput.Library
     
+    /// D depends on both A and C
+    /// The problem was that the last branch to be merged would override the first branch
+    let sigTcEnvRepro =
+        [
+            "A.fsi", """
+module A
+
+type AType = class end
+"""
+            "A.fs", """
+module A
+
+type AType = class end
+"""
+            "B.fsi", """
+module B
+
+open A
+
+val b: AType -> unit
+"""
+            "B.fs", """
+module B
+
+open A
+
+let b (a:AType) = ()
+"""
+            "C.fsi", """
+module C
+
+type CType = class end
+"""
+            "C.fs", """
+module C
+
+type CType = class end
+"""
+            "D.fsi", """
+module D
+
+open A
+open C
+
+val d: CType -> unit 
+"""
+            "D.fs", """
+module D
+
+open A
+open B
+open C
+
+let d (c: CType) =
+    let a : AType = failwith "todo"
+    b a
+"""
+        ]
+        |> FProject.Make  CompileOutput.Library
+    
+    let emptyImplementation =
+        [
+            "A.fsi", """
+module A
+
+val a: int
+"""
+            "A.fs", "module A"
+        ]
+        |> FProject.Make  CompileOutput.Library
+    
     let all =
         [
             encodeDecodeSimple
             diamondBroken1
             fsFsi
             emptyNamespace
+            sigTcEnvRepro
+            emptyImplementation
         ]
 
 type Case =
