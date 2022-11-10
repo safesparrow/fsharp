@@ -9,7 +9,6 @@ open ParallelTypeCheckingTests.Types
 open ParallelTypeCheckingTests.Utils
 open ParallelTypeCheckingTests.DepResolving
 open NUnit.Framework
-open Newtonsoft.Json
 
 let buildFiles (files: (string * string) seq) =
     files

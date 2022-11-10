@@ -2,11 +2,7 @@
 
 #nowarn "1182"
 
-open System.Collections.Concurrent
-open System.Collections.Generic
 open System.IO
-open System.Threading
-open FSharp.Compiler
 open FSharp.Compiler.CheckBasics
 open FSharp.Compiler.CheckDeclarations
 open FSharp.Compiler.CompilerConfig

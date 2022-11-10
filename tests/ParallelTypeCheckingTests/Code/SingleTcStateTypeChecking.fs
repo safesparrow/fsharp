@@ -2,7 +2,6 @@
 
 #nowarn "1182"
 
-open FSharp.Compiler
 open FSharp.Compiler.CheckBasics
 open FSharp.Compiler.CheckDeclarations
 open FSharp.Compiler.CompilerConfig
@@ -10,10 +9,6 @@ open FSharp.Compiler.CompilerImports
 open FSharp.Compiler.DiagnosticsLogger
 open FSharp.Compiler.NameResolution
 open FSharp.Compiler.ParseAndCheckInputs
-open ParallelTypeCheckingTests
-open ParallelTypeCheckingTests.Types
-open ParallelTypeCheckingTests.Utils
-open ParallelTypeCheckingTests.DepResolving
 open FSharp.Compiler.Syntax
 open FSharp.Compiler.TypedTree
 open Internal.Utilities.Collections
