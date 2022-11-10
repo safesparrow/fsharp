@@ -11,19 +11,18 @@ open OpenTelemetry
 open OpenTelemetry.Resources
 open OpenTelemetry.Trace
 
-let CodeRoot =
-    @$"{__SOURCE_DIRECTORY__}\.checkouts\fcs"
-let replaceCodeRoot (s : string) = s.Replace("$CODE_ROOT$", CodeRoot)
+let CodeRoot = @$"{__SOURCE_DIRECTORY__}\.checkouts\fcs"
+let replaceCodeRoot (s: string) = s.Replace("$CODE_ROOT$", CodeRoot)
+
 let packages =
     // Here we assume that the NuGet packages are located in a certain user folder,
     // and that the projects being compiled use that global package cache
     let userprofile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
     let pathWithEnv = $@"{userprofile}\.nuget\packages"
-    Environment.ExpandEnvironmentVariables(pathWithEnv);
-let replacePaths (s : string) =
-    s
-    |> replaceCodeRoot
-    |> fun s -> s.Replace("$PACKAGES$", packages)
+    Environment.ExpandEnvironmentVariables(pathWithEnv)
+
+let replacePaths (s: string) =
+    s |> replaceCodeRoot |> (fun s -> s.Replace("$PACKAGES$", packages))
 
 [<Struct>]
 type Method =
@@ -31,11 +30,7 @@ type Method =
     | ParallelCheckingOfBackedImplFiles
     | Graph
 
-let methods =
-    [
-        Method.Sequential
-        Method.Graph
-    ]
+let methods = [ Method.Sequential; Method.Graph ]
 
 let setupOtel () =
     Sdk
@@ -44,34 +39,34 @@ let setupOtel () =
         .SetResourceBuilder(
             ResourceBuilder
                 .CreateDefault()
-                .AddService (serviceName = "program", serviceVersion = "42.42.42.44")
+                .AddService(serviceName = "program", serviceVersion = "42.42.42.44")
         )
         .AddJaegerExporter(fun c ->
             c.BatchExportProcessorOptions.MaxQueueSize <- 10000000
             c.BatchExportProcessorOptions.MaxExportBatchSize <- 10000000
             c.ExportProcessorType <- ExportProcessorType.Simple
-            c.MaxPayloadSizeInBytes <- Nullable (1000000000)
-        )
-        .Build ()
+            c.MaxPayloadSizeInBytes <- Nullable(1000000000))
+        .Build()
 
 type internal Args =
     {
-        Path : string
-        LineLimit : int option
-        Method : Method
-        WorkingDir : string option
+        Path: string
+        LineLimit: int option
+        Method: Method
+        WorkingDir: string option
     }
 
-let makeCompilationUnit (files : (string * string) list) : CompilationUnit =
-    let files = files |> List.map (fun (name, code) -> SourceCodeFileKind.Create(name, code))
+let makeCompilationUnit (files: (string * string) list) : CompilationUnit =
+    let files =
+        files |> List.map (fun (name, code) -> SourceCodeFileKind.Create(name, code))
+
     match files with
     | [] -> failwith "empty files"
     | first :: rest ->
         let f = fsFromString first |> FS
-        f
-        |> withAdditionalSourceFiles rest
+        f |> withAdditionalSourceFiles rest
 
-let internal mapMethod (method : Method) =
+let internal mapMethod (method: Method) =
     match method with
     | Method.Sequential -> TypeCheckingMode.Sequential
     | Method.ParallelCheckingOfBackedImplFiles -> TypeCheckingMode.ParallelCheckingOfBackedImplFiles
