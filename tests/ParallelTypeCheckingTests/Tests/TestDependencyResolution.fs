@@ -4,7 +4,6 @@
 
 open FSharp.Compiler.Service.Tests.Common
 open System.IO
-open Buildalyzer
 open ParallelTypeCheckingTests
 open ParallelTypeCheckingTests.Types
 open ParallelTypeCheckingTests.Utils
@@ -337,53 +336,31 @@ let analyseResult (result: DepsResult) =
                 v |> Array.map (fun d -> result.Graph[d].Length) |> Array.max)
 
     printfn $"TotalDeps: {totalDeps}, topFirstDeps: {topFirstDeps}"
-//
-// open GiGraph.Dot.Extensions
-// open GiGraph.Dot.Output.Options
-// let makeDotFile (path : string) (graph : Graph<File>) : unit =
-//     let g = DotGraph(directed=true)
-//     g.Layout.Direction <- DotLayoutDirection.LeftToRight
-//     let name (f : File) = $"{f.QualifiedName}.{Path.GetExtension(f.Name)}" 
-//     graph
-//     |> Graph.collectEdges
-//     |> Array.iter (fun (a, b) -> g.Edges.Add(name a, name b) |> ignore)
-//     let _options = DotFormattingOptions()
-//     printfn $"{g.Build()}"
-//     g.SaveToFile(path)
 
 [<Test>]
 let ``Analyse hardcoded files`` () =
     let deps = DependencyResolution.detectFileDependencies sampleFiles
     printfn "Detected file dependencies:"
     deps.Graph |> Graph.print
-    // makeDotFile "graph.dot" deps.Graph
 
 let private parseProjectAndGetSourceFiles (projectFile: string) =
-    //let cacheDir = "."
-    //let getName projectFile = Path.Combine(Path.GetFileName(projectFile), ".fsharp"
-    let m = AnalyzerManager()
-    let analyzer = m.GetProject(projectFile)
-    let results = analyzer.Build()
-    // TODO Generalise for multiple TFMs
-    let res = results.Results |> Seq.head
-    let files = res.SourceFiles
-    log "built project using Buildalyzer"
-    files
+    projectFile
+    |> TestUtils.getProjectArgs
+    |> TestUtils.extractSourceFilesFromArgs
 
 [<TestCase(__SOURCE_DIRECTORY__
            + @"\..\..\FSharp.Compiler.ComponentTests\FSharp.Compiler.ComponentTests.fsproj")>]
 [<TestCase(__SOURCE_DIRECTORY__ + @"\..\..\..\src\Compiler\FSharp.Compiler.Service.fsproj")>]
-[<Explicit("Slow as it uses Buildalyzer to analyse (build) projects first")>]
 let ``Analyse whole projects and print statistics`` (projectFile: string) =
     log $"Start finding file dependency graph for {projectFile}"
     let files = parseProjectAndGetSourceFiles projectFile
 
+    log $"{files.Length} source files loaded using ProjInfo"
     let files =
         files
         |> Array.Parallel.mapi (fun i f ->
             let code = System.IO.File.ReadAllText(f)
             let ast = parseSourceCode (f, code)
-
             {
                 Idx = FileIdx.make i
                 //Code = code
@@ -420,5 +397,3 @@ let ``Analyse whole projects and print statistics`` (projectFile: string) =
                 v |> Array.map (fun d -> graph.Graph[d].Length) |> Array.max)
 
     printfn $"TotalDeps: {totalDeps}, topFirstDeps: {topFirstDeps}, diff: {totalDeps - topFirstDeps}"
-    
-    // makeDotFile "FCS.deps.dot" graph.Graph

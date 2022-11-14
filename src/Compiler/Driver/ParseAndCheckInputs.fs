@@ -1738,8 +1738,6 @@ let CheckMultipleInputsInParallel
 let mutable CheckMultipleInputsUsingGraphMode: CheckArgs -> (PartialResult list * TcState) =
     fun _ -> failwith $"Graph-based type-checking function not set - set CheckMultipleInputsUsingGraphMode before using this mode"
 
-let mutable typeCheckingMode: TypeCheckingMode = TypeCheckingMode.Sequential
-
 let CheckClosedInputSet (ctok, checkForErrors, tcConfig: TcConfig, tcImports, tcGlobals, prefixPathOpt, tcState, eagerFormat, inputs) =
     // tcEnvAtEndOfLastFile is the environment required by fsi.exe when incrementally adding definitions
     let results, tcState =

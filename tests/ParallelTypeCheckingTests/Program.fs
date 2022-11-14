@@ -1,35 +1,28 @@
 ﻿module internal ParallelTypeCheckingTests.Program
 
-#nowarn "1182"
-
-open FSharp.Compiler.CompilerConfig
 open ParallelTypeCheckingTests.TestUtils
 
-let _parse (argv: string[]) : Args =
-    let parseMode (mode: string) =
-        match mode.ToLower() with
+let parseArgs (argv: string[]) : Args =
+    let parseMode (method: string) =
+        match method.ToLower() with
         | "sequential" -> Method.Sequential
         | "parallelfs" -> Method.ParallelCheckingOfBackedImplFiles
         | "graph" -> Method.Graph
-        | _ -> failwith $"Unrecognised mode: {mode}"
+        | _ -> failwith $"Unrecognised method: {method}"
 
-    let path, mode, workingDir =
+    let method, path =
         match argv with
-        | [| path |] -> path, Method.Sequential, None
-        | [| path; method |] -> path, parseMode method, None
-        | [| path; method; workingDir |] -> path, parseMode method, Some workingDir
-        | _ -> failwith "Invalid args - use 'args_path [method [fs-parallel]]'"
+        | [| path |] -> Method.Graph, path
+        | [| method; path |] -> parseMode method, path
+        | _ -> failwith "Invalid args. Usage: '%method% %project_file%'"
 
     {
-        Path = path
-        LineLimit = None
-        Method = mode
-        WorkingDir = workingDir
+        Method = method
+        ProjectFile = path
     }
 
 [<EntryPoint>]
-let main _argv =
-    let args = _parse _argv
-    let args = { args with LineLimit = None }
+let main argv =
+    let args = parseArgs argv
     TestCompilationFromCmdlineArgs.TestCompilerFromArgs args
     0

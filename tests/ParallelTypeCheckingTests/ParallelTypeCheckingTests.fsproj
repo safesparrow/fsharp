@@ -72,8 +72,4 @@
     <PackageReference Include="FSharp.Core" Version="$(FSharpCoreShippedPackageVersionValue)" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Buildalyzer" Version="4.1.2" />
-  </ItemGroup>
-
 </Project>
