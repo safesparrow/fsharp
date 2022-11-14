@@ -10,55 +10,22 @@ open ParallelTypeCheckingTests.TestUtils
 
 type Codebase =
     {
-        WorkDir: string
-        Path: string
-        Limit: int option
+        ProjectFile : string
     }
 
 let codebases =
     [|
         {
-            WorkDir = $@"{__SOURCE_DIRECTORY__}\.fcs_test\src\compiler"
-            Path = $@"{__SOURCE_DIRECTORY__}\FCS.args.txt"
-            Limit = None
+            ProjectFile = $@"{__SOURCE_DIRECTORY__}\.fcs_test\src\compiler\FSharp.Compiler.Service.fsproj"
         }
         {
-            WorkDir = $@"{__SOURCE_DIRECTORY__}\.fcs_test\tests\FSharp.Compiler.ComponentTests"
-            Path = $@"{__SOURCE_DIRECTORY__}\ComponentTests.args.txt"
-            Limit = None
+            ProjectFile = $@"{__SOURCE_DIRECTORY__}\.fcs_test\tests\FSharp.Compiler.ComponentTests\FSharp.Compiler.ComponentTests.fsproj"
         }
     |]
 
-let internal setupParsed config =
-    let {
-            Path = path
-            LineLimit = lineLimit
-            Method = method
-            WorkingDir = workingDir
-        } =
-        config
-
-    let args =
-        System.IO.File.ReadAllLines(path |> replacePaths)
-        |> fun lines ->
-            match lineLimit with
-            | Some limit -> Array.take (Math.Min(limit, lines.Length)) lines
-            | None -> lines
-        |> Array.map replacePaths
-
-    setupCompilationMethod method
-
-    printfn $"Method: {method}"
-    let args =
-        match method with
-        | Method.Sequential -> args
-        | Method.ParallelCheckingOfBackedImplFiles ->
-            Array.append args [|"--test:ParallelCheckingWithSignatureFilesOn"|]
-        | Method.Graph ->
-            Array.append args [|"--test:GraphBasedChecking"|] 
-    
-    printfn $"WorkingDir = {workingDir}"
-    workingDir |> Option.iter (fun dir -> Environment.CurrentDirectory <- dir)
+let internal setupParsed {Method = method; ProjectFile = path} =
+    let args = getProjectArgs path
+    let args = Array.append args (TestCompilation.methodOptions method |> List.toArray) 
     args
 
 let internal TestCompilerFromArgs (config: Args) : unit =
@@ -75,36 +42,33 @@ let internal TestCompilerFromArgs (config: Args) : unit =
         }
 
     try
+        printfn $"Type-checking method used: {config.Method}"
         let args = setupParsed config
         let exit: int = CommandLineMain.mainAux (args, true, Some exiter)
         Assert.That(exit, Is.Zero)
     finally
         Environment.CurrentDirectory <- oldWorkDir
 
-let internal codebaseToConfig code method =
+let internal codebaseToConfig (code : Codebase) method =
     {
-        Path = code.Path
-        LineLimit = code.Limit
+        ProjectFile = code.ProjectFile
         Method = method
-        WorkingDir = Some code.WorkDir
     }
 
-[<TestCaseSource(nameof (codebases))>]
+[<TestCaseSource(nameof codebases)>]
 [<Explicit("Slow, only useful as a sanity check that the test codebase is sound and type-checks using the old method")>]
 let ``1. Test sequential type-checking`` (code: Codebase) =
     let config = codebaseToConfig code Method.Sequential
     TestCompilerFromArgs config
 
-/// Before running this test, you must prepare the codebase by running the script 'FCS.prepare.ps1'
-[<TestCaseSource(nameof (codebases))>]
+[<TestCaseSource(nameof codebases)>]
 [<Explicit("Slow, only useful as a sanity check that the test codebase is sound and type-checks using the parallel-fs method")>]
 let ``2. Test parallelfs type-checking`` (code: Codebase) =
     let config = codebaseToConfig code Method.ParallelCheckingOfBackedImplFiles
     TestCompilerFromArgs config
     
-/// Before running this test, you must prepare the codebase by running the script 'FCS.prepare.ps1'
-[<TestCaseSource(nameof (codebases))>]
+[<TestCaseSource(nameof codebases)>]
 let ``3. Test graph-based type-checking`` (code: Codebase) =
     let config = codebaseToConfig code Method.Graph
+    printfn $"Args file generated: {config.ProjectFile}"
     TestCompilerFromArgs config
-
