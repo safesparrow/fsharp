@@ -1,5 +1,6 @@
 ﻿module ParallelTypeCheckingTests.TestCompilationFromCmdlineArgs
 
+open System.IO
 open FSharp.Compiler.CompilerConfig
 open FSharp.Compiler.DiagnosticsLogger
 open NUnit.Framework
@@ -44,6 +45,8 @@ let internal TestCompilerFromArgs (config: Args) : unit =
     try
         printfn $"Type-checking method used: {config.Method}"
         let args = setupParsed config
+        File.WriteAllLines("c:/projekty/fsharp/args.txt", args)
+        //let args = File.ReadAllLines(@"C:\projekty\fsharp\heuristic\tests\ParallelTypeCheckingTests\Tests\ComponentTests.args.txt")
         let exit: int = CommandLineMain.mainAux (args, true, Some exiter)
         Assert.That(exit, Is.Zero)
     finally

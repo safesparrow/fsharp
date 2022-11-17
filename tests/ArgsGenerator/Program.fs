@@ -14,7 +14,7 @@ let loadProjectArgs (projectFile: string) =
     let props =
         [
             "TargetFramework", "net7.0"
-            "Configuration", "Release"
+            "Configuration", "Debug"
         ]
     let res =
         ProjectLoader.getProjectInfo projectFile props (BinaryLogGeneration.Within(DirectoryInfo("c:/projekty/fsharp/cracking_logs")))

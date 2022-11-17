@@ -96,6 +96,7 @@ let runProcess
 
 let getProjectArgs (projectFile : string) : string[] =
     // TODO Make ArgsGenerator a dotnet tool
+    //let argsGeneratorProjectPath = $"{__SOURCE_DIRECTORY__}/../../ArgsGenerator/ArgsGenerator.fsproj"
     let argsGeneratorProjectPath = $"{__SOURCE_DIRECTORY__}/../../ArgsGenerator/ArgsGenerator.fsproj"
     let workingDir = "."
     let name = "dotnet.exe" // TODO Handle non-Windows OS
