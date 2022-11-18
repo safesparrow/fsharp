@@ -19,6 +19,7 @@ let parseArgs (argv: string[]) : Args =
     {
         Method = method
         ProjectFile = path
+        Parallel = false
     }
 
 [<EntryPoint>]

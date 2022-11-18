@@ -13,6 +13,7 @@ let loadProjectArgs (projectFile: string) =
 
     let props =
         [
+            "EnableSourceLink", "true"
             "TargetFramework", "net7.0"
             "Configuration", "Debug"
         ]

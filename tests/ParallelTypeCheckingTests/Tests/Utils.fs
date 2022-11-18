@@ -51,6 +51,7 @@ type Args =
     {
         Method : Method
         ProjectFile : string
+        Parallel : bool
     }
     
 let makeCompilationUnit (files: (string * string) list) : CompilationUnit =
