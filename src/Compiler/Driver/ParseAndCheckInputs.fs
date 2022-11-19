@@ -1393,18 +1393,10 @@ let CheckOneInput
 
         match partialResult with
         | Choice1Of2 result -> return result, tcState
-        | Choice2Of2 (amap, _conditionalDefines, rootSig, _priorErrors, file, tcStateForImplFile, _ccuSigForFile) ->
-            return
-                AddDummyCheckResultsToTcState(
-                    tcGlobals,
-                    amap,
-                    file.QualifiedName,
-                    prefixPathOpt,
-                    tcSink,
-                    tcState,
-                    tcStateForImplFile,
-                    rootSig
-                )
+        | Choice2Of2 (_amap, _conditionalDefines, rootSig, _priorErrors, file, tcStateForImplFile, ccuSigForFile) ->
+            let emptyImplFile = CreateEmptyDummyImplFile file.QualifiedName rootSig
+            let tcEnvAtEnd = tcStateForImplFile.TcEnvFromImpls
+            return (tcEnvAtEnd, EmptyTopAttrs, Some emptyImplFile, ccuSigForFile), tcState
     }
 
 let mutable asts = ConcurrentDictionary<string, ParsedInput>()
