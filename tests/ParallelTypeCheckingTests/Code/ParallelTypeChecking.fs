@@ -14,6 +14,8 @@ open FSharp.Compiler.CompilerConfig
 open FSharp.Compiler.CompilerImports
 open FSharp.Compiler.DiagnosticsLogger
 open FSharp.Compiler.NameResolution
+open FSharp.Compiler.OptimizeInputs
+open FSharp.Compiler.Optimizer
 open FSharp.Compiler.ParseAndCheckInputs
 open ParallelTypeCheckingTests.FileInfoGathering
 open ParallelTypeCheckingTests.Types

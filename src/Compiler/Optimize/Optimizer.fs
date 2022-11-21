@@ -562,16 +562,16 @@ let BindInternalLocalVal cenv (v: Val) vval env =
         cenv.localInternalVals[v.Stamp] <- vval
         env
         
-let BindExternalLocalVal cenv (v: Val) vval env = 
+let BindExternalLocalVal cenv (v: Val) vval env acc = 
     let g = cenv.g
 
     let vval = if v.IsMutable then {vval with ValExprInfo=UnknownValue } else vval
 
-    let env =
+    let acc =
         match vval.ValExprInfo with 
-        | UnknownValue -> env  
+        | UnknownValue -> acc
         | _ ->
-            { env with localExternalVals=env.localExternalVals.Add (v.Stamp, vval) }
+            { acc with localExternalVals=acc.localExternalVals.Add (v.Stamp, vval) }
     // If we're compiling fslib then also bind the value as a non-local path to 
     // allow us to resolve the compiler-non-local-references that arise from env.fs
     //
@@ -579,14 +579,16 @@ let BindExternalLocalVal cenv (v: Val) vval env =
     // v, dereferencing it to find the corresponding signature Val, and adding an entry for the signature val.
     //
     // A similar code path exists in ilxgen.fs for the tables of "representations" for values
-    let env = 
-        if g.compilingFSharpCore then 
+    let env =
+        // TODO We ignore the fact this isn't delta-based for now.
+        if g.compilingFSharpCore then
+            failwith "FSharpCore optimization not supported on this PoC branch"
             // Passing an empty remap is sufficient for FSharp.Core.dll because it turns out the remapped type signature can
             // still be resolved.
             match tryRescopeVal g.fslibCcu Remap.Empty v with 
             | ValueSome vref -> BindValueForFslib vref.nlr v vval env 
             | _ -> env
-        else env
+        else acc
     env
 
 let rec BindValsInModuleOrNamespace cenv (mval: LazyModuleInfo) env =
@@ -4272,7 +4274,16 @@ and OptimizeModuleDefs cenv (env, bindInfosColl) defs =
     let defs, (env, bindInfosColl) = List.mapFold (OptimizeModuleContents cenv) (env, bindInfosColl) defs
     let defs, minfos = List.unzip defs
     (defs, UnionOptimizationInfos minfos), (env, bindInfosColl)
-   
+
+and mergeSignatureHidingInfos (a: SignatureHidingInfo) (b: SignatureHidingInfo) =
+    {
+        SignatureHidingInfo.HiddenTycons = Zset.union a.HiddenTycons b.HiddenTycons
+        HiddenTyconReprs = Zset.union a.HiddenTyconReprs b.HiddenTyconReprs
+        HiddenVals = Zset.union a.HiddenVals b.HiddenVals
+        HiddenRecdFields = Zset.union a.HiddenRecdFields b.HiddenRecdFields
+        HiddenUnionCases = Zset.union a.HiddenUnionCases b.HiddenUnionCases
+    }
+
 and OptimizeImplFileInternal cenv env isIncrementalFragment fsiMultiAssemblyEmit hidden implFile =
     let g = cenv.g
     let (CheckedImplFile (qname, pragmas, signature, contents, hasExplicitEntryPoint, isScript, anonRecdTypes, namedDebugPointsForInlinedCode)) = implFile
@@ -4298,7 +4309,8 @@ and OptimizeImplFileInternal cenv env isIncrementalFragment fsiMultiAssemblyEmit
         else
             // This optimizes and builds minfo w.r.t. the signature
             let mexprR, minfo = OptimizeModuleExprWithSig cenv env signature contents
-            let hidden = ComputeSignatureHidingInfoAtAssemblyBoundary signature hidden
+            let hiddenDelta = ComputeSignatureHidingInfoAtAssemblyBoundary signature SignatureHidingInfo.Empty
+            let hidden = mergeSignatureHidingInfos hidden hiddenDelta
             let minfoExternal = AbstractLazyModulInfoByHiding true hidden minfo
             let env =
                 // In F# interactive multi-assembly mode, internals are not accessible in the 'env' used intra-assembly
@@ -4311,7 +4323,7 @@ and OptimizeImplFileInternal cenv env isIncrementalFragment fsiMultiAssemblyEmit
 
     let implFileR = CheckedImplFile (qname, pragmas, signature, contentsR, hasExplicitEntryPoint, isScript, anonRecdTypes, namedDebugPointsForInlinedCode)
 
-    env, implFileR, minfo, hidden
+    env , implFileR, minfo, hidden
 
 /// Entry point
 let OptimizeImplFile (settings, ccu, tcGlobals, tcVal, importMap, optEnv, isIncrementalFragment, fsiMultiAssemblyEmit, emitTailcalls, hidden, mimpls) =
