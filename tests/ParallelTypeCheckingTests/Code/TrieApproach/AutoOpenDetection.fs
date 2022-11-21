@@ -16,7 +16,7 @@ let private autoOpenShapes =
 /// This isn't bullet proof but I wonder who would really alias this very core attribute.
 let isAutoOpenAttribute (attribute: SynAttribute) =
     match attribute.ArgExpr with
-    | SynExpr.Const(constant = SynConst.Unit _)
+    | SynExpr.Const(constant = SynConst.Unit)
     | SynExpr.Const(constant = SynConst.String _)
     | SynExpr.Paren(expr = SynExpr.Const(constant = SynConst.String _)) ->
         let attributeName =
@@ -30,31 +30,12 @@ let isAutoOpenAttribute (attribute: SynAttribute) =
 let isAnyAttributeAutoOpen (attributes: SynAttributes) =
     List.exists (fun (atl: SynAttributeList) -> List.exists isAutoOpenAttribute atl.Attributes) attributes
 
-let rec hasNestedModuleWithAutoOpenAttribute (decls: SynModuleDecl list) : bool =
-    decls
-    |> List.exists (function
-        | SynModuleDecl.NestedModule (moduleInfo = SynComponentInfo (attributes = attributes); decls = decls) ->
-            isAnyAttributeAutoOpen attributes || hasNestedModuleWithAutoOpenAttribute decls
-        | _ -> false)
-
-let rec hasNestedSigModuleWithAutoOpenAttribute (decls: SynModuleSigDecl list) : bool =
-    decls
-    |> List.exists (function
-        | SynModuleSigDecl.NestedModule (moduleInfo = SynComponentInfo (attributes = attributes); moduleDecls = decls) ->
-            isAnyAttributeAutoOpen attributes
-            || hasNestedSigModuleWithAutoOpenAttribute decls
-        | _ -> false)
-
 let hasAutoOpenAttributeInFile (ast: ParsedInput) : bool =
     match ast with
     | ParsedInput.SigFile (ParsedSigFileInput (contents = contents)) ->
-        contents
-        |> List.exists (fun (SynModuleOrNamespaceSig (attribs = attribs; decls = decls)) ->
-            isAnyAttributeAutoOpen attribs || hasNestedSigModuleWithAutoOpenAttribute decls)
+        List.exists (fun (SynModuleOrNamespaceSig (attribs = attribs)) -> isAnyAttributeAutoOpen attribs) contents
     | ParsedInput.ImplFile (ParsedImplFileInput (contents = contents)) ->
-        contents
-        |> List.exists (fun (SynModuleOrNamespace (attribs = attribs; decls = decls)) ->
-            isAnyAttributeAutoOpen attribs || hasNestedModuleWithAutoOpenAttribute decls)
+        List.exists (fun (SynModuleOrNamespace (attribs = attribs)) -> isAnyAttributeAutoOpen attribs) contents
 
 // ==============================================================================================================================
 // ==============================================================================================================================
