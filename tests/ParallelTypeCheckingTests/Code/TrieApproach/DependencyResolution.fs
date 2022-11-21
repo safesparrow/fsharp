@@ -172,7 +172,7 @@ let collectGhostDependencies (fileIndex: int) (trie: TrieNode) (queryTrie: Query
 
                 visit trie path
 
-            let children = indexesUnderNode node
+            let children = indexesUnderNode node |> Set.filter (fun idx -> idx < fileIndex)
             let intersection = Set.intersect result.FoundDependencies children
 
             if Set.isEmpty intersection then
@@ -213,7 +213,7 @@ let mkGraph (files: FileWithAST array) =
         time
             "filesWithAutoOpen"
             (Array.choose (fun f ->
-                if AutoOpenDetection.hasAutoOpenAttributeInFile f.AST then
+                if AlwaysLinkDetection.doesFileHasAutoOpenBehavior f.AST then
                     Some f.Idx
                 else
                     None))
@@ -221,7 +221,8 @@ let mkGraph (files: FileWithAST array) =
 
     time
         "link deps"
-        Array.Parallel.map
+        // Array.Parallel.map
+        Array.map
         (fun (file: FileWithAST) ->
             let fileContent = fileContents.[file.Idx]
             let knownFiles = getFileNameBefore files file.Idx
@@ -286,33 +287,33 @@ let ``Fantomas.Core for realzies`` () =
         @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\obj\Debug\netstandard2.0\.NETStandard,Version=v2.0.AssemblyAttributes.fs"
         @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\obj\Debug\netstandard2.0\Fantomas.Core.AssemblyInfo.fs"
         @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\AssemblyInfo.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\ISourceTextExtensions.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\RangeHelpers.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\AstExtensions.fsi"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\AstExtensions.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\TriviaTypes.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Utils.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\SourceParser.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\AstTransformer.fsi"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\AstTransformer.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Version.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Queue.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\FormatConfig.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Defines.fsi"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Defines.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Trivia.fsi"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Trivia.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\SourceTransformer.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Context.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodePrinter.fsi"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodePrinter.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodeFormatterImpl.fsi"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodeFormatterImpl.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Validation.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Selection.fsi"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Selection.fs"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodeFormatter.fsi"
-        @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodeFormatter.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\ISourceTextExtensions.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\RangeHelpers.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\AstExtensions.fsi"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\AstExtensions.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\TriviaTypes.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Utils.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\SourceParser.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\AstTransformer.fsi"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\AstTransformer.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Version.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Queue.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\FormatConfig.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Defines.fsi"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Defines.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Trivia.fsi"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Trivia.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\SourceTransformer.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Context.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodePrinter.fsi"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodePrinter.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodeFormatterImpl.fsi"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodeFormatterImpl.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Validation.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Selection.fsi"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Selection.fs"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodeFormatter.fsi"
+    // @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\CodeFormatter.fs"
     |]
     |> mkGraphAndReport
 
@@ -916,6 +917,51 @@ namespace Z
 open X
 """
                     (set [| 0; 1 |])
+            ]
+        // The nested module in this case adds content to the namespace
+        // Similar if a namespace had a type.
+        scenario
+            "Nested module with auto open attribute"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+namespace Product
+
+[<AutoOpen>]
+module X =
+    let x: int = 0
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+module Product.Feature
+
+let a b = x + b
+"""
+                    (set [| 0 |])
+            ]
+        // Similar to a top level auto open attribute, the global namespace also introduces a link to all the files that come after it.
+        scenario
+            "Global namespace always introduces a link"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+namespace global
+
+type A = { B : int }
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+module Product.Feature
+
+let f a = a.B
+"""
+                    (set [| 0 |])
             ]
     ]
 

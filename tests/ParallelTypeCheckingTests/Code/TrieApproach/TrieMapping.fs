@@ -51,10 +51,12 @@ let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
     | ParsedInput.SigFile (ParsedSigFileInput (contents = contents)) ->
         contents
         |> List.choose (fun (SynModuleOrNamespaceSig (longId = longId; kind = kind; decls = decls; accessibility = _accessibility)) ->
-            let hasTypes =
+            let hasTypesOrAutoOpenNestedModules =
                 List.exists
                     (function
                     | SynModuleSigDecl.Types _ -> true
+                    | SynModuleSigDecl.NestedModule(moduleInfo = SynComponentInfo (attributes = attributes)) ->
+                        AlwaysLinkDetection.isAnyAttributeAutoOpen attributes
                     | _ -> false)
                     decls
 
@@ -62,8 +64,8 @@ let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
                 match kind with
                 | SynModuleOrNamespaceKind.AnonModule
                 | SynModuleOrNamespaceKind.NamedModule -> false
-                | SynModuleOrNamespaceKind.DeclaredNamespace -> true
-                | SynModuleOrNamespaceKind.GlobalNamespace -> failwith "Not quite sure yet how to perceive this"
+                | SynModuleOrNamespaceKind.DeclaredNamespace
+                | SynModuleOrNamespaceKind.GlobalNamespace -> true
 
             match longId with
             | [] -> None
@@ -77,7 +79,13 @@ let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
 
                             let current =
                                 if isNamespace then
-                                    TrieNodeInfo.Namespace(name, (if hasTypes then hs file.Idx else emptyHS ()))
+                                    TrieNodeInfo.Namespace(
+                                        name,
+                                        (if hasTypesOrAutoOpenNestedModules then
+                                             hs file.Idx
+                                         else
+                                             emptyHS ())
+                                    )
                                 else
                                     TrieNodeInfo.Module(name, file.Idx)
 
@@ -114,10 +122,12 @@ let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
     | ParsedInput.ImplFile (ParsedImplFileInput (contents = contents)) ->
         contents
         |> List.choose (fun (SynModuleOrNamespace (longId = longId; kind = kind; decls = decls; accessibility = _accessibility)) ->
-            let hasTypes =
+            let hasTypesOrAutoOpenNestedModules =
                 List.exists
                     (function
                     | SynModuleDecl.Types _ -> true
+                    | SynModuleDecl.NestedModule(moduleInfo = SynComponentInfo (attributes = attributes)) ->
+                        AlwaysLinkDetection.isAnyAttributeAutoOpen attributes
                     | _ -> false)
                     decls
 
@@ -125,8 +135,8 @@ let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
                 match kind with
                 | SynModuleOrNamespaceKind.AnonModule
                 | SynModuleOrNamespaceKind.NamedModule -> false
-                | SynModuleOrNamespaceKind.DeclaredNamespace -> true
-                | SynModuleOrNamespaceKind.GlobalNamespace -> failwith "Not quite sure yet how to perceive this"
+                | SynModuleOrNamespaceKind.DeclaredNamespace
+                | SynModuleOrNamespaceKind.GlobalNamespace -> true
 
             match longId with
             | [] -> None
@@ -140,7 +150,13 @@ let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
 
                             let current =
                                 if isNamespace then
-                                    TrieNodeInfo.Namespace(name, (if hasTypes then hs file.Idx else emptyHS ()))
+                                    TrieNodeInfo.Namespace(
+                                        name,
+                                        (if hasTypesOrAutoOpenNestedModules then
+                                             hs file.Idx
+                                         else
+                                             emptyHS ())
+                                    )
                                 else
                                     TrieNodeInfo.Module(name, file.Idx)
 

@@ -1,4 +1,4 @@
-﻿module ParallelTypeCheckingTests.Code.TrieApproach.AutoOpenDetection
+﻿module ParallelTypeCheckingTests.Code.TrieApproach.AlwaysLinkDetection
 
 open FSharp.Compiler.Syntax
 
@@ -28,14 +28,23 @@ let isAutoOpenAttribute (attribute: SynAttribute) =
     | _ -> false
 
 let isAnyAttributeAutoOpen (attributes: SynAttributes) =
-    List.exists (fun (atl: SynAttributeList) -> List.exists isAutoOpenAttribute atl.Attributes) attributes
+    not attributes.IsEmpty
+    && List.exists (fun (atl: SynAttributeList) -> List.exists isAutoOpenAttribute atl.Attributes) attributes
 
-let hasAutoOpenAttributeInFile (ast: ParsedInput) : bool =
+let doesFileHasAutoOpenBehavior (ast: ParsedInput) : bool =
     match ast with
     | ParsedInput.SigFile (ParsedSigFileInput (contents = contents)) ->
-        List.exists (fun (SynModuleOrNamespaceSig (attribs = attribs)) -> isAnyAttributeAutoOpen attribs) contents
+        List.exists
+            (fun (SynModuleOrNamespaceSig (attribs = attribs; kind = kind)) ->
+                isAnyAttributeAutoOpen attribs
+                || kind = SynModuleOrNamespaceKind.GlobalNamespace)
+            contents
     | ParsedInput.ImplFile (ParsedImplFileInput (contents = contents)) ->
-        List.exists (fun (SynModuleOrNamespace (attribs = attribs)) -> isAnyAttributeAutoOpen attribs) contents
+        List.exists
+            (fun (SynModuleOrNamespace (attribs = attribs; kind = kind)) ->
+                isAnyAttributeAutoOpen attribs
+                || kind = SynModuleOrNamespaceKind.GlobalNamespace)
+            contents
 
 // ==============================================================================================================================
 // ==============================================================================================================================
@@ -50,4 +59,4 @@ let ``detect auto open`` () =
         Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "..", "src", "Compiler", "Utilities", "ImmutableArray.fsi")
 
     let ast = parseSourceCode (file, File.ReadAllText(file))
-    Assert.True(hasAutoOpenAttributeInFile ast)
+    Assert.True(doesFileHasAutoOpenBehavior ast)
