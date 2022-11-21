@@ -38,6 +38,7 @@
     <Compile Include="Code\GraphProcessing.fs" />
     <Compile Include="Code\ParallelTypeChecking.fs" />
     <Compile Include="Code\TrieApproach\Types.fs" />
+    <Compile Include="Code\TrieApproach\Continuation.fs" />
     <Compile Include="Code\TrieApproach\TrieMapping.fs" />
     <Compile Include="Code\TrieApproach\FileContentMapping.fs" />
     <Compile Include="Code\TrieApproach\AutoOpenDetection.fs" />

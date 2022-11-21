@@ -41,6 +41,14 @@ let queryTrieMemoized (trie: TrieNode) : QueryTrie =
 // Now how to detect the deps between files?
 // Process the content of each file using some state
 
+let processOwnNamespace (queryTrie: QueryTrie) (path: ModuleSegment list) (state: FileContentQueryState) : FileContentQueryState =
+    let queryResult = queryTrie path
+
+    match queryResult with
+    | QueryTrieNodeResult.NodeDoesNotExist -> state
+    | QueryTrieNodeResult.NodeDoesNotExposeData -> state.AddOwnNamespace path
+    | QueryTrieNodeResult.NodeExposesData files -> state.AddOwnNamespace(path, files)
+
 // Helper function to process a open statement
 // The statement could link to files and/or should be tracked as an open namespace
 let processOpenPath (queryTrie: QueryTrie) (path: ModuleSegment list) (state: FileContentQueryState) : FileContentQueryState =
@@ -49,7 +57,7 @@ let processOpenPath (queryTrie: QueryTrie) (path: ModuleSegment list) (state: Fi
     match queryResult with
     | QueryTrieNodeResult.NodeDoesNotExist -> state
     | QueryTrieNodeResult.NodeDoesNotExposeData -> state.AddOpenNamespace path
-    | QueryTrieNodeResult.NodeExposesData files -> state.AddDependenciesAndOpenNamespace(files, path)
+    | QueryTrieNodeResult.NodeExposesData files -> state.AddOpenNamespace(path, files)
 
 // Helper function to process an identifier
 let processIdentifier (queryTrie: QueryTrie) (path: ModuleSegment list) (state: FileContentQueryState) : FileContentQueryState =
@@ -70,7 +78,7 @@ let rec processStateEntry (queryTrie: QueryTrie) (state: FileContentQueryState) 
         let state =
             match topLevelPath with
             | [] -> state
-            | _ -> processOpenPath queryTrie topLevelPath state
+            | _ -> processOwnNamespace queryTrie topLevelPath state
 
         List.fold (processStateEntry queryTrie) state content
 
@@ -120,17 +128,79 @@ let time msg f a =
     let sw = System.Diagnostics.Stopwatch.StartNew()
     let result = f a
     sw.Stop()
-    printfn $"{msg} took %A{sw.Elapsed}"
+    printfn $"{msg} took %A{sw.Elapsed.Milliseconds}ms"
     result
+
+/// Returns a list of all the files that child nodes contain
+let indexesUnderNode (node: TrieNode) : Set<int> =
+    let rec collect (node: TrieNode) (continuation: int seq -> int seq) : int seq =
+        let continuations: ((int seq -> int seq) -> int seq) list =
+            node.Children
+            |> Seq.map (fun (KeyValue (_, node)) -> collect node)
+            |> Seq.toList
+
+        let finalContinuation indexes =
+            continuation (
+                seq {
+                    yield! node.Files
+                    yield! Seq.collect id indexes
+                }
+            )
+
+        Continuation.sequence continuations finalContinuation
+
+    Set.ofSeq (collect node id)
+
+/// A "ghost" dependency is a link between files that actually should be avoided.
+/// The user has a partial namespace or opens a namespace that does not produce anything.
+/// In order to still be able to compile the current file, the given namespace should be known to the file.
+/// We did not find it via the trie, because there are no files that contribute to this namespace.
+let collectGhostDependencies (fileIndex: int) (trie: TrieNode) (queryTrie: QueryTrie) (result: FileContentQueryState) =
+    // Go over all open namespaces, and assert all those links eventually went anywhere
+    result.OpenedNamespaces
+    |> Seq.collect (fun path ->
+        match queryTrie path with
+        | QueryTrieNodeResult.NodeExposesData _
+        | QueryTrieNodeResult.NodeDoesNotExist -> Array.empty
+        | QueryTrieNodeResult.NodeDoesNotExposeData ->
+            // At this point we are following up if an open namespace really lead nowhere.
+            let node =
+                let rec visit (node: TrieNode) (path: ModuleSegment list) =
+                    match path with
+                    | [] -> node
+                    | head :: tail -> visit node.Children.[head] tail
+
+                visit trie path
+
+            let children = indexesUnderNode node
+            let intersection = Set.intersect result.FoundDependencies children
+
+            if Set.isEmpty intersection then
+                // The partial open did not lead to anything
+                // In order for it to exist in the current file we need to link it
+                // to some file that introduces the namespace in the trie.
+                if Set.isEmpty children then
+                    // In this case not a single file is contributing to the opened namespace.
+                    // As a last resort we assume all files are dependent, in order to preserve valid code.
+                    [| 0 .. (fileIndex - 1) |]
+                else
+                    [| Seq.head children |]
+            else
+                // The partial open did eventually lead to a link in a file
+                Array.empty)
+    |> Seq.toArray
 
 let mkGraph (files: FileWithAST array) =
     // Implementation files backed by signatures should be excluded to construct the trie.
     let trieInput =
-        files
-        |> Array.filter (fun f ->
-            match f.AST with
-            | ParsedInput.SigFile _ -> true
-            | ParsedInput.ImplFile _ -> Array.forall (fun (sigFile: FileWithAST) -> sigFile.File <> $"{f.File}i") files)
+        time
+            "trieInput"
+            Array.filter
+            (fun f ->
+                match f.AST with
+                | ParsedInput.SigFile _ -> true
+                | ParsedInput.ImplFile _ -> Array.forall (fun (sigFile: FileWithAST) -> sigFile.File <> $"{f.File}i") files)
+            files
 
     let trie = time "TrieMapping.mkTrie" TrieMapping.mkTrie trieInput
 
@@ -140,12 +210,17 @@ let mkGraph (files: FileWithAST array) =
         time "FileContentMapping.mkFileContent" Array.Parallel.map FileContentMapping.mkFileContent files
 
     let filesWithAutoOpen =
-        trieInput
-        |> Array.filter (fun f -> AutoOpenDetection.hasAutoOpenAttributeInFile f.AST)
-        |> Array.map (fun f -> f.Idx)
+        time
+            "filesWithAutoOpen"
+            (Array.choose (fun f ->
+                if AutoOpenDetection.hasAutoOpenAttributeInFile f.AST then
+                    Some f.Idx
+                else
+                    None))
+            trieInput
 
     time
-        "mkGraph"
+        "link deps"
         Array.Parallel.map
         (fun (file: FileWithAST) ->
             let fileContent = fileContents.[file.Idx]
@@ -155,15 +230,23 @@ let mkGraph (files: FileWithAST array) =
             let result =
                 Seq.fold (processStateEntry queryTrie) (FileContentQueryState.Create file.Idx knownFiles) fileContent
 
-            let allDependencies =
-                if filesWithAutoOpen.Length > 0 then
-                    // Automatically add all files that came before the current file that use the [<AutoOpen>] attribute.
-                    let autoOpenDependencies =
-                        set ([| 0 .. (file.Idx - 1) |].Intersect(filesWithAutoOpen))
+            // after processing the file we should verify if any of the open statements are found in the trie but do not yield any file link.
+            let ghostDependencies = collectGhostDependencies file.Idx trie queryTrie result
 
-                    Set.union result.FoundDependencies autoOpenDependencies
+            // Automatically add all files that came before the current file that use the [<AutoOpen>] attribute.
+            let topLevelAutoOpenFiles =
+                if Array.isEmpty filesWithAutoOpen then
+                    Array.empty
                 else
-                    result.FoundDependencies
+                    [| 0 .. (file.Idx - 1) |].Intersect(filesWithAutoOpen).ToArray()
+
+            let allDependencies =
+                set
+                    [|
+                        yield! result.FoundDependencies
+                        yield! ghostDependencies
+                        yield! topLevelAutoOpenFiles
+                    |]
 
             file, Set.toArray allDependencies)
         files
@@ -184,7 +267,7 @@ let mkGraphAndReport files =
                 File = file
             })
 
-    let graph = mkGraph filesWithAST
+    let graph = time "mkGraph" mkGraph filesWithAST
 
     for fileName, deps in graph do
         let depString =
@@ -557,3 +640,289 @@ let ``FCS for debugging`` () =
         Array.map (fun (file: FileWithAST) -> FileContentMapping.mkFileContent file) filesWithAST
 
     ignore contents
+
+type Scenario =
+    {
+        Name: string
+        Files: (FileWithAST * Set<int>) array
+    }
+
+    override x.ToString() = x.Name
+
+let scenario name files =
+    let files = files |> List.toArray |> Array.mapi (fun idx f -> f idx)
+    { Name = name; Files = files }
+
+let sourceFile fileName content (dependencies: Set<int>) =
+    fun idx ->
+        {
+            Idx = idx
+            AST = parseSourceCode (fileName, content)
+            File = fileName
+        },
+        dependencies
+
+let codebases =
+    [
+        scenario
+            "Link via full open statement"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+module A
+do ()
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+module B
+open A
+"""
+                    (set [| 0 |])
+            ]
+        scenario
+            "Partial open statement"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+module Company.A
+let a = ()
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+module Other.B
+open Company
+open A
+"""
+                    (set [| 0 |])
+            ]
+        scenario
+            "Link via fully qualified identifier"
+            [
+                sourceFile
+                    "X.fs"
+                    """
+module X.Y.Z
+
+let z = 9
+"""
+                    Set.empty
+                sourceFile
+                    "Y.fs"
+                    """
+module A.B
+
+let a = 1 + X.Y.Z.z
+"""
+                    (set [| 0 |])
+            ]
+        scenario
+            "Link via partial open and prefixed identifier"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+module A.B.C
+
+let d = 1
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+module X.Y.Z
+
+open A.B
+
+let e = C.d + 1
+"""
+                    (set [| 0 |])
+            ]
+        scenario
+            "Modules sharing a namespace do not link them automatically"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+module Project.A
+
+let a = 0
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+module Project.B
+
+let b = 0
+"""
+                    Set.empty
+                sourceFile
+                    "C.fs"
+                    """
+module Project.C
+
+let c = 0
+"""
+                    Set.empty
+                sourceFile
+                    "D.fs"
+                    """
+module Project.D
+
+let d = 0
+"""
+                    Set.empty
+            ]
+        scenario
+            "Files which add types to a namespace are automatically linked to files that share said namespace"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+namespace Product
+
+type X = { Y : string }
+"""
+                    Set.empty
+                // There is no way to infer what `b` is in this example
+                // It could be the type defined in A, so we cannot take any risks here.
+                // We link A as dependency of B because A exposes a type in the shared namespace `Product`.
+                sourceFile
+                    "B.fs"
+                    """
+module Product.Feature
+
+let a b = b.Y + "z"
+"""
+                    (set [| 0 |])
+            ]
+        scenario
+            "Toplevel AutoOpen attribute will link to all the subsequent files"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+[<AutoOpen>]
+module Utils
+
+let a b c = b - c
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+namespace X
+
+type Y = { Q: int }
+"""
+                    (set [| 0 |])
+            ]
+        // Notice how we link B.fs to A.fsi, this will always be the case for signature/implementation pairs.
+        // When debugging, notice that the `Helpers` will be not a part of the trie.
+        scenario
+            "Signature files are being used to construct the Trie"
+            [
+                sourceFile
+                    "A.fsi"
+                    """
+module A
+
+val a: int -> int
+"""
+                    Set.empty
+                sourceFile
+                    "A.fs"
+                    """
+module A
+
+module Helpers =
+    let impl a = a + 1
+
+let a b = Helpers.impl b
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+module B
+
+let b = A.a 42
+"""
+                    (set [| 0 |])
+            ]
+        scenario
+            "A partial open statement still links to a file as a last resort"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+module X.A
+
+let a = 0
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+module X.B
+
+let b = 0
+"""
+                    Set.empty
+                sourceFile
+                    "C.fs"
+                    """
+module Y.C
+
+// This open statement does not do anything.
+// It can safely be removed, but because of its presence we need to link it to something that exposes the namespace X.
+// We try and pick the file with the lowest index 
+open X
+
+let c = 0
+"""
+                    (set [| 0 |])
+            ]
+        // This is a very last resort measure to link C to all files that came before it.
+        // `open X` does exist but there is no file that is actively contributing to the X namespace
+        // This is a trade-off scenario, if A.fs had a type or nested module we would consider it to contribute to the X namespace.
+        // As it is empty, we don't include the file index in the trie.
+        scenario
+            "A open statement that leads nowhere should link to every file that came above it."
+            [
+                sourceFile
+                    "A.fs"
+                    """
+namespace X
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+namespace Y
+"""
+                    Set.empty
+                sourceFile
+                    "C.fs"
+                    """
+namespace Z
+
+open X
+"""
+                    (set [| 0; 1 |])
+            ]
+    ]
+
+[<TestCaseSource(nameof codebases)>]
+let ``Supported scenario`` (scenario: Scenario) =
+    let graph = mkGraph (Array.map fst scenario.Files)
+
+    for file, expectedDeps in scenario.Files do
+        let actualDeps = graph |> Array.find (fun (f, _) -> f.File = file.File) |> snd
+        Assert.AreEqual(expectedDeps, actualDeps, $"Dependencies don't match for {System.IO.Path.GetFileName file.File}")

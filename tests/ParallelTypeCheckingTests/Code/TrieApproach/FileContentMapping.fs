@@ -3,13 +3,6 @@
 open FSharp.Compiler.Syntax
 open FSharp.Compiler.SyntaxTreeOps
 
-[<RequireQualifiedAccess>]
-module Continuation =
-    let rec sequence<'a, 'ret> (recursions: (('a -> 'ret) -> 'ret) list) (finalContinuation: 'a list -> 'ret) : 'ret =
-        match recursions with
-        | [] -> [] |> finalContinuation
-        | recurse :: recurses -> recurse (fun ret -> sequence recurses (fun rets -> ret :: rets |> finalContinuation))
-
 type Continuations = ((FileContentEntry list -> FileContentEntry list) -> FileContentEntry list) list
 
 /// Option.toList >> (List.collect f)
@@ -326,7 +319,9 @@ let visitSynExpr (e: SynExpr) : FileContentEntry list =
             visit operator (fun operatorNodes -> visit quotedExpr (fun quotedNodes -> operatorNodes @ quotedNodes |> continuation))
         | SynExpr.Typed (expr, targetType, _) -> visit expr (fun nodes -> nodes @ visitSynType targetType |> continuation)
         | SynExpr.Tuple (exprs = exprs) ->
-            let continuations = List.map visit exprs
+            let continuations: ((FileContentEntry list -> FileContentEntry list) -> FileContentEntry list) list =
+                List.map visit exprs
+
             let finalContinuation = lc id >> continuation
             Continuation.sequence continuations finalContinuation
         | SynExpr.AnonRecd (copyInfo = copyInfo; recordFields = recordFields) ->

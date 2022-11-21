@@ -22,12 +22,6 @@ type TrieNodeInfo =
     | Module of segment: string * file: int
     | Namespace of segment: string * filesThatExposeTypes: HashSet<int>
 
-    member x.Segment =
-        match x with
-        | Root -> failwith "Root has no segment"
-        | Module (segment = segment)
-        | Namespace (segment = segment) -> segment
-
     member x.Files: Set<int> =
         match x with
         | Root -> failwith "Root has no files"
@@ -64,7 +58,8 @@ type FileContent =
 
 type FileContentQueryState =
     {
-        OpenNamespaces: Set<ModuleSegment list>
+        OwnNamespace: ModuleSegment list option
+        OpenedNamespaces: Set<ModuleSegment list>
         FoundDependencies: Set<int>
         CurrentFile: int
         KnownFiles: Set<int>
@@ -72,29 +67,48 @@ type FileContentQueryState =
 
     static member Create (fileIndex: int) (knownFiles: Set<int>) =
         {
-            OpenNamespaces = Set.empty
+            OwnNamespace = None
+            OpenedNamespaces = Set.empty
             FoundDependencies = Set.empty
             CurrentFile = fileIndex
             KnownFiles = knownFiles
         }
 
+    member x.AddOwnNamespace(ns: ModuleSegment list, ?files: Set<int>) =
+        match files with
+        | None -> { x with OwnNamespace = Some ns }
+        | Some files ->
+            let foundDependencies =
+                Set.filter x.KnownFiles.Contains files |> Set.union x.FoundDependencies
+
+            { x with
+                OwnNamespace = Some ns
+                FoundDependencies = foundDependencies
+            }
+
     member x.AddDependencies(files: Set<int>) : FileContentQueryState =
         let files = Set.filter x.KnownFiles.Contains files |> Set.union x.FoundDependencies
         { x with FoundDependencies = files }
 
-    member x.AddOpenNamespace(path: ModuleSegment list) =
-        { x with
-            OpenNamespaces = Set.add path x.OpenNamespaces
-        }
+    member x.AddOpenNamespace(path: ModuleSegment list, ?files: Set<int>) =
+        match files with
+        | None ->
+            { x with
+                OpenedNamespaces = Set.add path x.OpenedNamespaces
+            }
+        | Some files ->
+            let foundDependencies =
+                Set.filter x.KnownFiles.Contains files |> Set.union x.FoundDependencies
 
-    member x.AddDependenciesAndOpenNamespace(files: Set<int>, path: ModuleSegment list) =
-        let foundDependencies =
-            Set.filter x.KnownFiles.Contains files |> Set.union x.FoundDependencies
+            { x with
+                FoundDependencies = foundDependencies
+                OpenedNamespaces = Set.add path x.OpenedNamespaces
+            }
 
-        { x with
-            FoundDependencies = foundDependencies
-            OpenNamespaces = Set.add path x.OpenNamespaces
-        }
+    member x.OpenNamespaces =
+        match x.OwnNamespace with
+        | None -> x.OpenedNamespaces
+        | Some ownNs -> Set.add ownNs x.OpenedNamespaces
 
 [<RequireQualifiedAccess>]
 type QueryTrieNodeResult =
