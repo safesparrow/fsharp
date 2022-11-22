@@ -441,6 +441,7 @@ type MethodEnv =
 
     override x.ToString() = "<MethodEnv>"
 
+
 type IncrementalOptimizationEnv =
     { /// An identifier to help with name generation
       latestBoundId: Ident option
@@ -480,6 +481,54 @@ type IncrementalOptimizationEnv =
           methEnv = { pipelineCount = 0 } }
 
     override x.ToString() = "<IncrementalOptimizationEnv>"
+
+let empty = 
+    { latestBoundId = None // Not used across files
+      dontInline = Zset.empty Int64.order // sum
+      typarInfos = [] // sum
+      functionVal = None 
+      dontSplitVars = ValMap.Empty // sum
+      disableMethodSplitting = false // ?
+      localExternalVals = LayeredMap.Empty // sum 
+      globalModuleInfos = LayeredMap.Empty // sum
+      methEnv = { pipelineCount = 0 } } // Not used across files
+
+let mergeMaps<'Key, 'Value when 'Key : comparison> (maps: Map<'Key, 'Value>[]) =
+    maps
+    |> Array.collect Map.toArray
+    |> Map.ofArray
+
+let mergeEnvs (envs: IncrementalOptimizationEnv[]): IncrementalOptimizationEnv =
+    // TODO use a single HashSet for perf?
+    let dontInline =
+        envs
+        |> Array.collect (fun e -> e.dontInline |> Zset.elements |> List.toArray)
+        |> fun xs -> Zset.Create (Int64.order, xs)
+    let typarInfos = envs |> Array.toList |> List.collect (fun e -> e.typarInfos)
+    let dontSplitVars =
+        envs
+        |> Seq.collect (fun e -> e.dontSplitVars.Contents |> Map.toSeq)
+        |> Seq.toArray
+        |> ValMap.OfArray'
+    let localExternalVals =
+        envs
+        |> Array.map (fun e -> e.localExternalVals)
+        |> mergeMaps<Stamp, ValInfo>
+    let globalModuleInfos =
+        envs
+        |> Array.map (fun e -> e.globalModuleInfos)
+        |> mergeMaps
+    {
+      latestBoundId = None // Not used across files
+      dontInline = dontInline// sum
+      typarInfos = typarInfos // sum
+      functionVal = None // Not used across files 
+      dontSplitVars = dontSplitVars // sum
+      disableMethodSplitting = false // not used across files
+      localExternalVals = localExternalVals // sum 
+      globalModuleInfos = globalModuleInfos // sum
+      methEnv = { pipelineCount = 0 } // Not used across files
+    }
 
 //-------------------------------------------------------------------------
 // IsPartialExprVal - is the expr fully known?
@@ -562,16 +611,16 @@ let BindInternalLocalVal cenv (v: Val) vval env =
         cenv.localInternalVals[v.Stamp] <- vval
         env
         
-let BindExternalLocalVal cenv (v: Val) vval env acc = 
+let BindExternalLocalVal cenv (v: Val) vval env = 
     let g = cenv.g
 
     let vval = if v.IsMutable then {vval with ValExprInfo=UnknownValue } else vval
 
     let acc =
         match vval.ValExprInfo with 
-        | UnknownValue -> acc
+        | UnknownValue -> env
         | _ ->
-            { acc with localExternalVals=acc.localExternalVals.Add (v.Stamp, vval) }
+            { env with localExternalVals=env.localExternalVals.Add (v.Stamp, vval) }
     // If we're compiling fslib then also bind the value as a non-local path to 
     // allow us to resolve the compiler-non-local-references that arise from env.fs
     //

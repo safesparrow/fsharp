@@ -1,6 +1,7 @@
 ﻿/// Parallel processing of graph of work items with dependencies
 module ParallelTypeCheckingTests.GraphProcessing
 
+open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Threading
 
@@ -264,9 +265,6 @@ let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality a
         nodesArray
         |> Array.filter (fun node -> includeInFinalState node.Info.Item)
         |> Array.sortBy (fun node -> node.Info.Item)
-        |> fun nodes ->
-            // printfn $"%+A{nodes |> Array.map (fun n -> n.Info.Item.ToString())}"
-            nodes
         |> Array.fold
             (fun (fileResults, state) node ->
                 let fileResult, state = folder state (node.Result.Value |> snd)
@@ -369,3 +367,88 @@ let processGraphSimple<'Item, 'Result when 'Item: equality and 'Item: comparison
 
     nodesArray
     |> Array.map (fun n -> n.Result.Value)
+
+
+/// Used for processing
+type NodeInfo3<'Item> =
+    {
+        Item: 'Item
+        Deps: 'Item[]
+        Dependants: 'Item[]
+    }
+    
+type Node3<'Item> =
+    {
+        Info: NodeInfo3<'Item>
+        mutable ProcessedDepsCount: int
+    }
+
+/// Graph processing that doesn't handle results but just invokes the worker when dependencies are ready
+let processGraphSimpler<'Item when 'Item: equality and 'Item: comparison>
+    (graph: Graph<'Item>)
+    // Accepts item and a list of item results. Handles combining results.
+    (doWork: 'Item -> unit)
+    (parallelism: int)
+    : unit
+    =
+    let dependants = graph |> Graph.reverse
+
+    let makeNode (item: 'Item) : Node3<'Item> =
+        let info =
+            let exists = graph.ContainsKey item
+            if
+                not exists
+                || not (dependants.ContainsKey item)
+            then
+                failwith $"WHAT {item}"
+            {
+                Item = item
+                Deps = graph[item]
+                Dependants = dependants[item]
+            }
+
+        {
+            Info = info
+            ProcessedDepsCount = 0
+        }
+
+    let nodes = graph.Keys |> Seq.map (fun item -> item, makeNode item) |> readOnlyDict
+    let lookup item = nodes[item]
+    let lookupMany items = items |> Array.map lookup
+
+    let leaves =
+        nodes.Values
+        |> Seq.filter (fun n -> n.Info.Deps.Length = 0)
+        |> Seq.toArray
+
+    printfn $"Node count: {nodes.Count}"
+
+    let work
+        (node: Node3<'Item>)
+        : Node3<'Item>[]
+        =
+        let _deps = lookupMany node.Info.Deps
+        doWork node.Info.Item
+        // Need to double-check that only one dependency schedules this dependant
+        let unblocked =
+            node.Info.Dependants
+            |> lookupMany
+            |> Array.filter (fun x ->
+                let pdc =
+                    // TODO Not ideal, better ways most likely exist
+                    lock x (fun () ->
+                        x.ProcessedDepsCount <- x.ProcessedDepsCount + 1
+                        x.ProcessedDepsCount)
+                pdc = x.Info.Deps.Length
+            )
+        unblocked
+
+    use cts = new CancellationTokenSource()
+
+    Parallel.processInParallel
+        leaves
+        work
+        parallelism
+        (fun processedCount -> processedCount = nodes.Count)
+        cts.Token
+        (fun x -> x.Info.Item.ToString())

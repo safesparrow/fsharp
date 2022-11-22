@@ -86,7 +86,8 @@ type ValMap<'T>(imap: StampMap<'T>) =
     member _.Remove (v: Val) = ValMap (imap.Remove(v.Stamp))
     static member Empty = ValMap<'T> Map.empty
     member _.IsEmpty = imap.IsEmpty
-    static member OfList vs = (vs, ValMap<'T>.Empty) ||> List.foldBack (fun (x, y) acc -> acc.Add x y) 
+    static member OfList vs = (vs, ValMap<'T>.Empty) ||> List.foldBack (fun (x, y) acc -> acc.Add x y)
+    static member OfArray' (vs: (Stamp * 'T)[]) = (vs, ValMap<'T>.Empty) ||> Array.foldBack (fun (x, y) acc -> ValMap (acc.Contents.Add(x, y))) 
 
 //--------------------------------------------------------------------------
 // renamings
@@ -4641,6 +4642,13 @@ type SignatureHidingInfo =
           HiddenVals = Zset.empty valOrder
           HiddenRecdFields = Zset.empty recdFieldRefOrder
           HiddenUnionCases = Zset.empty unionCaseRefOrder }
+        
+    static member Union (a: SignatureHidingInfo) (b: SignatureHidingInfo): SignatureHidingInfo =
+        { HiddenTycons = Zset.union a.HiddenTycons b.HiddenTycons
+          HiddenTyconReprs = Zset.union a.HiddenTyconReprs b.HiddenTyconReprs
+          HiddenVals = Zset.union a.HiddenVals b.HiddenVals
+          HiddenRecdFields = Zset.union a.HiddenRecdFields b.HiddenRecdFields
+          HiddenUnionCases = Zset.union a.HiddenUnionCases b.HiddenUnionCases }
 
 let addValRemap v vNew tmenv = 
     { tmenv with valRemap= tmenv.valRemap.Add v (mkLocalValRef vNew) }

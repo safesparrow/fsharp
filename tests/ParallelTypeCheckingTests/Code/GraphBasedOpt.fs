@@ -63,10 +63,43 @@ type Phase3Inputs = PhaseInputs
 type Phase3Res = IncrementalOptimizationEnv * CheckedImplFile
 type Phase3Fun = Phase3Inputs -> Phase3Res
 
+type Phase =
+    | Phase1
+    | Phase2
+    | Phase3
+module Phase =
+    let all = [|Phase1; Phase2; Phase3|]
+    let prev (phase: Phase) =
+        match phase with
+        | Phase1 -> None
+        | Phase2 -> Some Phase1
+        | Phase3 -> Some Phase2
+    let next (phase: Phase) =
+        match phase with
+        | Phase1 -> Some Phase2
+        | Phase2 -> Some Phase3
+        | Phase3 -> None
+
 type PhaseRes =
     | Phase1 of Phase1Res
     | Phase2 of Phase2Res
     | Phase3 of Phase3Res
+    with
+        member x.Which =
+            match x with
+            | Phase1 _ -> Phase.Phase1
+            | Phase2 _ -> Phase.Phase2
+            | Phase3 _ -> Phase.Phase3
+        member x.Get1() =
+            match x with
+            | Phase1 x -> x
+            | Phase2 _
+            | Phase3 _ -> failwith $"Called {nameof(x.Get1)} but this is {x.Which}"
+        member x.Get2() =
+            match x with
+            | Phase2 x -> x
+            | Phase1 _
+            | Phase3 _ -> failwith $"Called {nameof(x.Get2)} but this is {x.Which}"
 
 type FileResultsComplete =
     {
@@ -100,23 +133,6 @@ let collectResults (inputs: CollectorInputs) : CollectorOutputs =
             
     files, lastFilePhase1Env
 
-type Phase =
-    | Phase1
-    | Phase2
-    | Phase3
-module Phase =
-    let all = [|Phase1; Phase2; Phase3|]
-    let prev (phase: Phase) =
-        match phase with
-        | Phase1 -> None
-        | Phase2 -> Some Phase1
-        | Phase3 -> Some Phase2
-    let next (phase: Phase) =
-        match phase with
-        | Phase1 -> Some Phase2
-        | Phase2 -> Some Phase3
-        | Phase3 -> None
-
 type FilePhaseFuncs = Phase1Fun * Phase2Fun * Phase3Fun   
 type FileResults =
     {
@@ -130,12 +146,23 @@ type FileResults =
             | Phase.Phase1 -> this.Phase1 |> Option.isSome
             | Phase.Phase2 -> this.Phase2 |> Option.isSome
             | Phase.Phase3 -> this.Phase3 |> Option.isSome
+        member x.Get1 () = x.Phase1 |> Option.get
+        member x.Get2 () = x.Phase2 |> Option.get
+        member x.Get3 () = x.Phase3 |> Option.get
+        
         static member Empty =
             {
                 Phase1 = None
                 Phase2 = None
                 Phase3 = None
             }
+
+module FileResults =
+    let complete (results: FileResults) =
+        let {FileResults.Phase1 = phase1; Phase2 = phase2; Phase3 = phase3} = results
+        match phase1, phase2, phase3 with
+        | Some phase1, Some phase2, Some phase3 -> {FileResultsComplete.Phase1 = phase1; Phase2 = phase2; Phase3 = phase3}
+        | _ -> failwith $"Unexpected lack of results"
 
 type WorkItem =
     | Phase1 of Phase1Inputs
@@ -173,10 +200,33 @@ type _Result = OptimizeRes
 let processNode ({Idx = idx; Phase = phase} as node : Node) (res: FileResults) : OptimizeRes =
     failwith ""
     
-let goGraph (graph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFuncs) (files: CheckedImplFile[]) : CollectorOutputs =
+let collectResults (inputs: CollectorInputs) : CollectorOutputs =
+    let files =
+        inputs
+        |> Array.map (fun {Phase1 = phase1; Phase2 = _phase2; Phase3 = phase3} ->
+            let (_, _, implFileOptData, _), optimizeDuringCodeGen = phase1
+            let _, implFile = phase3
+            let implFile =
+                {
+                    ImplFile = implFile
+                    OptimizeDuringCodeGen = optimizeDuringCodeGen
+                }
+            implFile, implFileOptData
+        )
+        
+    let lastFilePhase1Env =
+        inputs
+        |> Array.last
+        |> fun {Phase1 = phase1} ->
+            let (optEnvPhase1, _, _, _), _ = phase1
+            optEnvPhase1
+            
+    files, lastFilePhase1Env
+    
+let goGraph (idxGraph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFuncs) (files: CheckedImplFile[]) : CollectorOutputs =
     // Create a 3x graph by cloning each file with its deps for each phase. Add links from phase3 -> phase2 -> phase1
     let graph =
-        graph
+        idxGraph
         |> Seq.collect (fun (KeyValue(file, deps)) ->
             // Create a node per each phase
             Phase.all
@@ -196,12 +246,33 @@ let goGraph (graph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, phase
             )
         )
         |> readOnlyDict
+        
+    let transitiveGraph =
+        graph
+        |> Graph.transitiveOpt
 
     let results =
-        GraphProcessing.processGraphSimple
-            graph
-            (failwith "")
-            1
+        Array.init files.Length (fun _ -> FileResults.Empty)
+    let getRes (FileIdx idx) = results[idx]
     
+    let work (x: Node) : unit =
+        let {Idx=idx; Phase=phase} = x
+        let res = getRes idx
+        let deps = transitiveGraph[x]
+        
+        match phase with
+        | Phase.Phase1 ->
+            failwith ""
+            
+        | _ -> failwith ""
+        
+        failwith ""
     
-    failwith ""
+    GraphProcessing.processGraphSimpler<Node>
+        graph
+        (failwith "")
+        1
+    
+    let completeResults = results |> Array.map FileResults.complete
+    let collected = collectResults completeResults
+    collected
