@@ -13,25 +13,17 @@ let queryTrie (trie: TrieNode) (path: ModuleSegment list) : QueryTrieNodeResult 
         match path with
         | [] -> failwith "path should not be empty"
         | [ lastNodeFromPath ] ->
-            let childResults =
-                currentNode.Children
-                |> Seq.tryFind (fun (KeyValue (segment, _childNode)) -> segment = lastNodeFromPath)
-
-            match childResults with
-            | None -> QueryTrieNodeResult.NodeDoesNotExist
-            | Some (KeyValue (_, childNode)) ->
+            match currentNode.Children.TryGetValue(lastNodeFromPath) with
+            | false, _ -> QueryTrieNodeResult.NodeDoesNotExist
+            | true, childNode ->
                 if Set.isEmpty childNode.Files then
                     QueryTrieNodeResult.NodeDoesNotExposeData
                 else
                     QueryTrieNodeResult.NodeExposesData(childNode.Files)
         | currentPath :: restPath ->
-            let childResults =
-                currentNode.Children
-                |> Seq.tryFind (fun (KeyValue (segment, _childNode)) -> segment = currentPath)
-
-            match childResults with
-            | None -> QueryTrieNodeResult.NodeDoesNotExist
-            | Some (KeyValue (_, childNode)) -> visit childNode restPath
+            match currentNode.Children.TryGetValue(currentPath) with
+            | false, _ -> QueryTrieNodeResult.NodeDoesNotExist
+            | true, childNode -> visit childNode restPath
 
     visit trie path
 
@@ -91,7 +83,7 @@ let rec processStateEntry (queryTrie: QueryTrie) (state: FileContentQueryState) 
         // The extended path could add a new link (in case of a module or namespace with types)
         // It might also not add anything at all (in case it the extended path is still a partial one)
         (stateAfterFullOpenPath, state.OpenNamespaces)
-        ||> Seq.fold (fun acc openNS -> processOpenPath queryTrie [ yield! openNS; yield! path ] acc)
+        ||> Set.fold (fun acc openNS -> processOpenPath queryTrie [ yield! openNS; yield! path ] acc)
 
     | FileContentEntry.PrefixedIdentifier path ->
         match path with
@@ -101,14 +93,14 @@ let rec processStateEntry (queryTrie: QueryTrie) (state: FileContentQueryState) 
         | _ ->
             // path could consist out of multiple segments
             (state, [| 1 .. path.Length |])
-            ||> Seq.fold (fun state takeParts ->
+            ||> Array.fold (fun state takeParts ->
                 let path = List.take takeParts path
                 // process the name was if it were a FQN
                 let stateAfterFullIdentifier = processIdentifier queryTrie path state
 
                 // Process the name in combination with the existing open namespaces
                 (stateAfterFullIdentifier, state.OpenNamespaces)
-                ||> Seq.fold (fun acc openNS -> processIdentifier queryTrie [ yield! openNS; yield! path ] acc))
+                ||> Set.fold (fun acc openNS -> processIdentifier queryTrie [ yield! openNS; yield! path ] acc))
 
     | FileContentEntry.NestedModule (nestedContent = nestedContent) ->
         // We don't want our current state to be affect by any open statements in the nested module
@@ -133,23 +125,19 @@ let time msg f a =
 
 /// Returns a list of all the files that child nodes contain
 let indexesUnderNode (node: TrieNode) : Set<int> =
-    let rec collect (node: TrieNode) (continuation: int seq -> int seq) : int seq =
-        let continuations: ((int seq -> int seq) -> int seq) list =
-            node.Children
-            |> Seq.map (fun (KeyValue (_, node)) -> collect node)
-            |> Seq.toList
+    let rec collect (node: TrieNode) (continuation: int list -> int list) : int list =
+        let continuations: ((int list -> int list) -> int list) list =
+            [
+                for node in node.Children.Values do
+                    yield collect node
+            ]
 
         let finalContinuation indexes =
-            continuation (
-                seq {
-                    yield! node.Files
-                    yield! Seq.collect id indexes
-                }
-            )
+            continuation [ yield! node.Files; yield! List.collect id indexes ]
 
         Continuation.sequence continuations finalContinuation
 
-    Set.ofSeq (collect node id)
+    Set.ofList (collect node id)
 
 /// A "ghost" dependency is a link between files that actually should be avoided.
 /// The user has a partial namespace or opens a namespace that does not produce anything.
@@ -157,8 +145,8 @@ let indexesUnderNode (node: TrieNode) : Set<int> =
 /// We did not find it via the trie, because there are no files that contribute to this namespace.
 let collectGhostDependencies (fileIndex: int) (trie: TrieNode) (queryTrie: QueryTrie) (result: FileContentQueryState) =
     // Go over all open namespaces, and assert all those links eventually went anywhere
-    result.OpenedNamespaces
-    |> Seq.collect (fun path ->
+    Set.toArray result.OpenedNamespaces
+    |> Array.collect (fun path ->
         match queryTrie path with
         | QueryTrieNodeResult.NodeExposesData _
         | QueryTrieNodeResult.NodeDoesNotExist -> Array.empty
@@ -188,7 +176,6 @@ let collectGhostDependencies (fileIndex: int) (trie: TrieNode) (queryTrie: Query
             else
                 // The partial open did eventually lead to a link in a file
                 Array.empty)
-    |> Seq.toArray
 
 let mkGraph (files: FileWithAST array) =
     // Implementation files backed by signatures should be excluded to construct the trie.
@@ -229,6 +216,7 @@ let mkGraph (files: FileWithAST array) =
 
             // Process all entries of a file and query the trie when required to find the dependent files.
             let result =
+                // Seq is faster than List in this case.
                 Seq.fold (processStateEntry queryTrie) (FileContentQueryState.Create file.Idx knownFiles) fileContent
 
             // after processing the file we should verify if any of the open statements are found in the trie but do not yield any file link.

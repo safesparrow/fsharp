@@ -4,7 +4,7 @@ open System.Collections.Generic
 open FSharp.Compiler.Syntax
 open Microsoft.FSharp.Collections
 
-let mergeTrieNodes (defaultChildSize: int) (tries: TrieNode seq) =
+let mergeTrieNodes (defaultChildSize: int) (tries: TrieNode array) =
     let rec mergeTrieNodesAux (root: TrieNode) (KeyValue (k, v)) =
         if root.Children.ContainsKey k then
             let node = root.Children.[k]
@@ -22,7 +22,7 @@ let mergeTrieNodes (defaultChildSize: int) (tries: TrieNode seq) =
         else
             root.Children.Add(k, v)
 
-    match Seq.tryExactlyOne tries with
+    match Array.tryExactlyOne tries with
     | Some singleTrie ->
         assert (singleTrie.Current = TrieNodeInfo.Root)
         singleTrie
@@ -118,6 +118,7 @@ let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
                     visit id longId
 
                 Some { Current = Root; Children = rootNode })
+        |> List.toArray
         |> mergeTrieNodes contents.Length
     | ParsedInput.ImplFile (ParsedImplFileInput (contents = contents)) ->
         contents
@@ -189,6 +190,7 @@ let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
                     visit id longId
 
                 Some { Current = Root; Children = rootNode })
+        |> List.toArray
         |> mergeTrieNodes contents.Length
 
 and mkTrieForSynModuleDecl (fileIndex: int) (decl: SynModuleDecl) : KeyValuePair<string, TrieNode> option =
