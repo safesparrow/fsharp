@@ -2,113 +2,15 @@
 
 #nowarn "1182"
 
-open System
-open System.Collections.Concurrent
-open System.Collections.Generic
 open System.IO
-open System.Threading
-open FSharp.Compiler
-open FSharp.Compiler.CheckBasics
-open FSharp.Compiler.CheckDeclarations
-open FSharp.Compiler.CompilerConfig
-open FSharp.Compiler.CompilerImports
-open FSharp.Compiler.DiagnosticsLogger
-open FSharp.Compiler.NameResolution
-open FSharp.Compiler.OptimizeInputs
 open FSharp.Compiler.Optimizer
-open FSharp.Compiler.ParseAndCheckInputs
+open FSharp.Compiler.Service.Driver.OptimizeTypes
 open FSharp.Compiler.TypedTreeOps
-open ParallelTypeCheckingTests.FileInfoGathering
-open ParallelTypeCheckingTests.Types
 open ParallelTypeCheckingTests.Utils
 open ParallelTypeCheckingTests
-open ParallelTypeCheckingTests.DepResolving
-open FSharp.Compiler.Syntax
-open FSharp.Compiler.TcGlobals
-open FSharp.Compiler.Text
 open FSharp.Compiler.TypedTree
 open Internal.Utilities.Library
 open Internal.Utilities.Library.Extras
-
-
-type OptimizeDuringCodeGen = bool -> Expr -> Expr
-type OptimizeRes =
-    (IncrementalOptimizationEnv * CheckedImplFile * ImplFileOptimizationInfo * SignatureHidingInfo) * OptimizeDuringCodeGen
-
-type Optimize =
-    OptimizationSettings *
-    CcuThunk *
-    TcGlobals *
-    ConstraintSolver.TcValF *
-    Import.ImportMap *
-    IncrementalOptimizationEnv *
-    bool *
-    bool *
-    bool *
-    SignatureHidingInfo *
-    CheckedImplFile ->
-        OptimizeRes
-
-type PhaseInputs = IncrementalOptimizationEnv * SignatureHidingInfo * CheckedImplFile
-
-type Phase1Inputs = PhaseInputs
-type Phase1Res = OptimizeRes
-type Phase1Fun = Phase1Inputs -> Phase1Res
-
-type Phase2Inputs = PhaseInputs
-type Phase2Res = IncrementalOptimizationEnv * CheckedImplFile
-type Phase2Fun = Phase2Inputs -> Phase2Res
-
-type Phase3Inputs = PhaseInputs
-type Phase3Res = IncrementalOptimizationEnv * CheckedImplFile
-type Phase3Fun = Phase3Inputs -> Phase3Res
-
-type Phase =
-    | Phase1
-    | Phase2
-    | Phase3
-module Phase =
-    let all = [|Phase1; Phase2; Phase3|]
-    let prev (phase: Phase) =
-        match phase with
-        | Phase1 -> None
-        | Phase2 -> Some Phase1
-        | Phase3 -> Some Phase2
-    let next (phase: Phase) =
-        match phase with
-        | Phase1 -> Some Phase2
-        | Phase2 -> Some Phase3
-        | Phase3 -> None
-
-type PhaseRes =
-    | Phase1 of Phase1Res
-    | Phase2 of Phase2Res
-    | Phase3 of Phase3Res
-    with
-        member x.Which =
-            match x with
-            | Phase1 _ -> Phase.Phase1
-            | Phase2 _ -> Phase.Phase2
-            | Phase3 _ -> Phase.Phase3
-        member x.Get1() =
-            match x with
-            | Phase1 x -> x
-            | Phase2 _
-            | Phase3 _ -> failwith $"Called {nameof(x.Get1)} but this is {x.Which}"
-        member x.Get2() =
-            match x with
-            | Phase2 x -> x
-            | Phase1 _
-            | Phase3 _ -> failwith $"Called {nameof(x.Get2)} but this is {x.Which}"
-
-type FileResultsComplete =
-    {
-        Phase1: Phase1Res
-        Phase2: Phase2Res
-        Phase3: Phase3Res
-    }
-type CollectorInputs = FileResultsComplete[]
-type CollectorOutputs = (CheckedImplFileAfterOptimization * ImplFileOptimizationInfo)[] * IncrementalOptimizationEnv
 
 let collectResults (inputs: CollectorInputs) : CollectorOutputs =
     let files =
@@ -178,11 +80,10 @@ type Node =
 module Node =
     let make phase idx = { Idx = idx; Phase = phase }
 
-
 let getPhase1Res (p: FileResults) =
     p.Phase1
     |> Option.get
-    |> fun ((env, _, _, hidden), _) -> env, hidden
+    |> fun ((env, file, _, hidden), _) -> env, file, hidden
 
 let getPhase2Res (p: FileResults) =
     p.Phase2
@@ -197,32 +98,12 @@ type IdxGraph = Graph<FileIdx>
     
 type _Result = OptimizeRes
 
-let processNode ({Idx = idx; Phase = phase} as node : Node) (res: FileResults) : OptimizeRes =
-    failwith ""
-    
-let collectResults (inputs: CollectorInputs) : CollectorOutputs =
-    let files =
-        inputs
-        |> Array.map (fun {Phase1 = phase1; Phase2 = _phase2; Phase3 = phase3} ->
-            let (_, _, implFileOptData, _), optimizeDuringCodeGen = phase1
-            let _, implFile = phase3
-            let implFile =
-                {
-                    ImplFile = implFile
-                    OptimizeDuringCodeGen = optimizeDuringCodeGen
-                }
-            implFile, implFileOptData
-        )
-        
-    let lastFilePhase1Env =
-        inputs
-        |> Array.last
-        |> fun {Phase1 = phase1} ->
-            let (optEnvPhase1, _, _, _), _ = phase1
-            optEnvPhase1
-            
-    files, lastFilePhase1Env
-    
+let mergeHidingInfos (empty: SignatureHidingInfo) (infos: SignatureHidingInfo[]): SignatureHidingInfo =
+    infos
+    |> Array.fold SignatureHidingInfo.Union empty
+
+type Goer = IdxGraph -> IncrementalOptimizationEnv -> FilePhaseFuncs -> CheckedImplFile[] -> CollectorOutputs
+
 let goGraph (idxGraph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFuncs) (files: CheckedImplFile[]) : CollectorOutputs =
     // Create a 3x graph by cloning each file with its deps for each phase. Add links from phase3 -> phase2 -> phase1
     let graph =
@@ -247,30 +128,80 @@ let goGraph (idxGraph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, ph
         )
         |> readOnlyDict
         
-    let transitiveGraph =
-        graph
+    let mergeEnvs envs =
+        mergeEnvs env0 envs
+        
+    let transitiveIdxGraph =
+        idxGraph
         |> Graph.transitiveOpt
 
     let results =
         Array.init files.Length (fun _ -> FileResults.Empty)
     let getRes (FileIdx idx) = results[idx]
+    let hidingInfo0 = SignatureHidingInfo.Empty
     
     let work (x: Node) : unit =
         let {Idx=idx; Phase=phase} = x
+        let file = files[idx.Idx]
         let res = getRes idx
-        let deps = transitiveGraph[x]
+        let depResults =
+            transitiveIdxGraph[idx]
+            |> Array.map getRes
         
         match phase with
         | Phase.Phase1 ->
-            failwith ""
-            
-        | _ -> failwith ""
-        
-        failwith ""
+            // take env and hidingInfo from dependencies
+            let env =
+                depResults
+                |> Array.map (fun r ->
+                    let (a,_b,_c,_d), _e = r.Get1()
+                    a
+                )
+                |> mergeEnvs
+            let hidingInfo =
+                depResults
+                |> Array.map (fun r ->
+                    let (_a,_b,_c,d), _e = r.Get1()
+                    d
+                )
+                |> mergeHidingInfos hidingInfo0
+            let inputs = env, hidingInfo, file
+            let phase1Res = phase1 inputs
+            res.Phase1 <- Some phase1Res
+        | Phase.Phase2 ->
+            // take env from dependencies
+            let env =
+                depResults
+                |> Array.map (fun r ->
+                    let a,_b = r.Get2()
+                    a
+                )
+                |> mergeEnvs
+            // Get file and hidingInfo from phase1 of the current file
+            let (_optEnv, file, _, hidingInfo), _ = res.Get1()
+            let inputs = env, hidingInfo, file
+            let phase2Res = phase2 inputs
+            res.Phase2 <- Some phase2Res
+        | Phase.Phase3 ->
+            // take env from dependencies
+            let env =
+                depResults
+                |> Array.map (fun r ->
+                    let a,_b = r.Get3()
+                    a
+                )
+                |> mergeEnvs
+            // Get file and hidingInfo from phase1 of the current file
+            let (_optEnv, _, _, hidingInfo), _ = res.Get1()
+            // Get impl file from phase2
+            let _, file = res.Get2()
+            let inputs = env, hidingInfo, file
+            let phase3Res = phase3 inputs
+            res.Phase3 <- Some phase3Res
     
     GraphProcessing.processGraphSimpler<Node>
         graph
-        (failwith "")
+        work
         1
     
     let completeResults = results |> Array.map FileResults.complete

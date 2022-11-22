@@ -61,7 +61,7 @@ type CcuOptimizationInfo = LazyModuleInfo
 type IncrementalOptimizationEnv =
     static member Empty: IncrementalOptimizationEnv
 
-val mergeEnvs : IncrementalOptimizationEnv[] -> IncrementalOptimizationEnv
+val mergeEnvs : IncrementalOptimizationEnv -> IncrementalOptimizationEnv[] -> IncrementalOptimizationEnv
 
 /// For building optimization environments incrementally
 val internal BindCcu:

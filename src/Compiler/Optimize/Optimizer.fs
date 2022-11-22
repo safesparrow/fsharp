@@ -482,23 +482,15 @@ type IncrementalOptimizationEnv =
 
     override x.ToString() = "<IncrementalOptimizationEnv>"
 
-let empty = 
-    { latestBoundId = None // Not used across files
-      dontInline = Zset.empty Int64.order // sum
-      typarInfos = [] // sum
-      functionVal = None 
-      dontSplitVars = ValMap.Empty // sum
-      disableMethodSplitting = false // ?
-      localExternalVals = LayeredMap.Empty // sum 
-      globalModuleInfos = LayeredMap.Empty // sum
-      methEnv = { pipelineCount = 0 } } // Not used across files
-
 let mergeMaps<'Key, 'Value when 'Key : comparison> (maps: Map<'Key, 'Value>[]) =
     maps
     |> Array.collect Map.toArray
     |> Map.ofArray
 
-let mergeEnvs (envs: IncrementalOptimizationEnv[]): IncrementalOptimizationEnv =
+
+
+let mergeEnvs (env0: IncrementalOptimizationEnv) (envs: IncrementalOptimizationEnv[]): IncrementalOptimizationEnv =
+    let envs = Array.append [|env0|] envs
     // TODO use a single HashSet for perf?
     let dontInline =
         envs
@@ -519,15 +511,16 @@ let mergeEnvs (envs: IncrementalOptimizationEnv[]): IncrementalOptimizationEnv =
         |> Array.map (fun e -> e.globalModuleInfos)
         |> mergeMaps
     {
-      latestBoundId = None // Not used across files
-      dontInline = dontInline// sum
-      typarInfos = typarInfos // sum
-      functionVal = None // Not used across files 
-      dontSplitVars = dontSplitVars // sum
-      disableMethodSplitting = false // not used across files
-      localExternalVals = localExternalVals // sum 
-      globalModuleInfos = globalModuleInfos // sum
-      methEnv = { pipelineCount = 0 } // Not used across files
+      env0 with
+          //latestBoundId = env0.latestBoundId // Not used across files
+          dontInline = dontInline// sum
+          typarInfos = typarInfos // sum
+          //functionVal = None // Not used across files 
+          dontSplitVars = dontSplitVars // sum
+          //disableMethodSplitting = false // not used across files
+          localExternalVals = localExternalVals // sum 
+          globalModuleInfos = globalModuleInfos // sum
+          //methEnv = { pipelineCount = 0 } // Not used across files
     }
 
 //-------------------------------------------------------------------------

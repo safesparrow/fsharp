@@ -206,6 +206,47 @@ let d (c: CType) =
         ]
         |> FProject.Make CompileOutput.Library
 
+    let fullyParallel =
+        [
+            "A.fs",
+            """
+module A
+let x = 1
+"""
+            "B.fs",
+            """
+module B
+let x = 1
+"""
+            "C.fs",
+            """
+module C
+let x = 1
+"""
+            "D.fs",
+            """
+module D
+let x = 1
+"""
+            "E.fs",
+            """
+module E
+let x = 1
+"""
+            "F.fs",
+            """
+module F
+let x = 1
+"""
+            "G.fs",
+            """
+module G
+let x = 1
+"""
+        ]
+        |> FProject.Make CompileOutput.Library
+
+    
     let all =
         [
             encodeDecodeSimple
@@ -213,6 +254,7 @@ let d (c: CType) =
             fsFsi
             emptyNamespace
             dependentSignatures
+            fullyParallel
         ]
 
 type Case =

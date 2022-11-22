@@ -12,6 +12,8 @@ open FSharp.Compiler.Import
 open FSharp.Compiler.Optimizer
 open FSharp.Compiler.TcGlobals
 open FSharp.Compiler.TypedTree
+open System.Collections.Generic
+open FSharp.Compiler.Service.Driver.OptimizeTypes
 
 val GetGeneratedILModuleName: CompilerTarget -> string -> string
 
@@ -50,4 +52,13 @@ val NormalizeAssemblyRefs: CompilationThreadToken * ILGlobals * TcImports -> (IL
 
 val GetGeneratedILModuleName: CompilerTarget -> string -> string
 
-val mutable UseParallelOptimizer: bool
+type FilePhaseFuncs = Phase1Fun * Phase2Fun * Phase3Fun   
+type Goer = IReadOnlyDictionary<int, int> -> IncrementalOptimizationEnv -> FilePhaseFuncs -> CheckedImplFile[] -> CollectorOutputs
+val mutable goer: Goer option
+
+type OptimizerMode =
+    | Sequential
+    | PartiallyParallel
+    | GraphBased
+
+val mutable OptimizerMode: OptimizerMode

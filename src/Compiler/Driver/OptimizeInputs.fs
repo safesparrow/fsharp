@@ -7,6 +7,7 @@ open System.Diagnostics
 open System.IO
 open System.Threading
 open FSharp.Compiler.Optimizer
+open FSharp.Compiler.Service.Driver.OptimizeTypes
 open Internal.Utilities.Library
 open FSharp.Compiler
 open FSharp.Compiler.AbstractIL.IL
@@ -51,47 +52,6 @@ let GetInitialOptimizationEnv (tcImports: TcImports, tcGlobals: TcGlobals) =
     let optEnv = Optimizer.IncrementalOptimizationEnv.Empty
     let optEnv = List.fold (AddExternalCcuToOptimizationEnv tcGlobals) optEnv ccuinfos
     optEnv
-
-type OptimizeDuringCodeGen = bool -> Expr -> Expr
-type OptimizeRes =
-    (IncrementalOptimizationEnv * CheckedImplFile * ImplFileOptimizationInfo * SignatureHidingInfo) * OptimizeDuringCodeGen
-
-type Optimize =
-    OptimizationSettings *
-    CcuThunk *
-    TcGlobals *
-    ConstraintSolver.TcValF *
-    Import.ImportMap *
-    IncrementalOptimizationEnv *
-    bool *
-    bool *
-    bool *
-    SignatureHidingInfo *
-    CheckedImplFile ->
-        OptimizeRes
-
-type PhaseInputs = IncrementalOptimizationEnv * SignatureHidingInfo * CheckedImplFile
-
-type Phase1Inputs = PhaseInputs
-type Phase1Res = OptimizeRes
-type Phase1Fun = Phase1Inputs -> Phase1Res
-
-type Phase2Inputs = PhaseInputs
-type Phase2Res = IncrementalOptimizationEnv * CheckedImplFile
-type Phase2Fun = Phase2Inputs -> Phase2Res
-
-type Phase3Inputs = PhaseInputs
-type Phase3Res = IncrementalOptimizationEnv * CheckedImplFile
-type Phase3Fun = Phase3Inputs -> Phase3Res
-
-type FileResultsComplete =
-    {
-        Phase1: Phase1Res
-        Phase2: Phase2Res
-        Phase3: Phase3Res
-    }
-type CollectorInputs = FileResultsComplete[]
-type CollectorOutputs = (CheckedImplFileAfterOptimization * ImplFileOptimizationInfo)[] * IncrementalOptimizationEnv
 
 let collectResults (inputs: CollectorInputs) : CollectorOutputs =
     let files =
@@ -300,7 +260,17 @@ let go (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFu
     let collected = results |> collectResults
     collected
 
-let mutable UseParallelOptimizer: bool = false
+type Goer = IReadOnlyDictionary<int, int> -> IncrementalOptimizationEnv -> FilePhaseFuncs -> CheckedImplFile[] -> CollectorOutputs
+
+let mutable goer: Goer option = None
+
+[<RequireQualifiedAccess>]
+type OptimizerMode =
+    | Sequential
+    | PartiallyParallel
+    | GraphBased
+
+let mutable OptimizerMode: OptimizerMode = OptimizerMode.Sequential
 
 let ApplyAllOptimizations
     (
@@ -453,11 +423,20 @@ let ApplyAllOptimizations
             env, implFile
     
     let results, optEnvFirstLoop =
-        if UseParallelOptimizer then
+        match OptimizerMode with
+        | OptimizerMode.GraphBased ->
+            let graph =
+                [||]
+                |> readOnlyDict
+            let goer = goer.Value
+            let a, b =
+                goer graph env0 (phase1, phase2, phase3) (implFiles |> List.toArray)
+            a |> Array.toList, b
+        | OptimizerMode.PartiallyParallel ->
             let a, b =
                 go env0 (phase1, phase2, phase3) (implFiles |> List.toArray)
             a |> Array.toList, b
-        else
+        | OptimizerMode.Sequential ->
             let results, (optEnvFirstLoop, _, _, _) =
                 ((optEnv0, optEnv0, optEnv0, SignatureHidingInfo.Empty), implFiles)
 
