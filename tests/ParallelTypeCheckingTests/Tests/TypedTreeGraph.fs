@@ -271,10 +271,7 @@ let ``Create Graph from typed tree`` (code: Codebase) =
                 ParallelTypeCheckingTests.Code.TrieApproach.DependencyResolution.mkGraph sourceFiles
 
             let alternateMap =
-                let getDepsByIdx idx =
-                    alternativeGraphFromHeuristic
-                    |> Seq.find (fun (file, _) -> file.Idx = idx)
-                    |> snd
+                let getDepsByIdx idx = alternativeGraphFromHeuristic.[idx]
 
                 (Map.empty, [ 0 .. (sourceFiles.Length - 1) ])
                 ||> List.fold (fun acc idx ->
@@ -286,22 +283,18 @@ let ``Create Graph from typed tree`` (code: Codebase) =
                     Map.add idx allDeps acc)
 
             let rec getAllDepsFromAlt idx : Set<int> =
-                let currentDeps =
-                    alternativeGraphFromHeuristic
-                    |> Seq.find (fun (file, _) -> file.Idx = idx)
-                    |> snd
-
+                let currentDeps = alternativeGraphFromHeuristic.[idx]
                 let transitiveDeps = Seq.collect getAllDepsFromAltMemoized currentDeps
-
                 set [| yield! currentDeps; yield! transitiveDeps |]
 
             and getAllDepsFromAltMemoized =
                 Internal.Utilities.Library.Tables.memoize getAllDepsFromAlt
 
-            Array.Parallel.iter
-                (fun (file: ParallelTypeCheckingTests.Code.TrieApproach.FileWithAST, _) ->
-                    compareDeps "Alternative heuristic" file.File file.Idx (Map.find file.Idx alternateMap))
-                alternativeGraphFromHeuristic
+            alternativeGraphFromHeuristic.Keys
+            |> Seq.toArray
+            |> Array.Parallel.iter (fun (fileIdx: int) ->
+                let file = sourceFiles.[fileIdx]
+                compareDeps "Alternative heuristic" file.QualifiedName fileIdx (Map.find file.Idx.Idx alternateMap))
 
         finally
             Environment.CurrentDirectory <- previousDir

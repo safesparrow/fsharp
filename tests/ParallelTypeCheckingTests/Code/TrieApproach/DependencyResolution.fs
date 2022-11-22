@@ -2,6 +2,7 @@
 
 open System.Linq
 open FSharp.Compiler.Syntax
+open ParallelTypeCheckingTests
 
 // This is pseudo code of how we could restructure the trie code
 // My main benefit is that you can easily visually inspect if an identifier will match something in the trie
@@ -177,68 +178,60 @@ let collectGhostDependencies (fileIndex: int) (trie: TrieNode) (queryTrie: Query
                 // The partial open did eventually lead to a link in a file
                 Array.empty)
 
-let mkGraph (files: FileWithAST array) =
+let mkGraph (files: FileWithAST array) : Graph<int> =
     // Implementation files backed by signatures should be excluded to construct the trie.
     let trieInput =
-        time
-            "trieInput"
-            Array.filter
+        Array.filter
             (fun f ->
                 match f.AST with
                 | ParsedInput.SigFile _ -> true
                 | ParsedInput.ImplFile _ -> Array.forall (fun (sigFile: FileWithAST) -> sigFile.File <> $"{f.File}i") files)
             files
 
-    let trie = time "TrieMapping.mkTrie" TrieMapping.mkTrie trieInput
-
+    let trie = TrieMapping.mkTrie trieInput
     let queryTrie: QueryTrie = queryTrieMemoized trie
 
-    let fileContents =
-        time "FileContentMapping.mkFileContent" Array.Parallel.map FileContentMapping.mkFileContent files
+    let fileContents = Array.Parallel.map FileContentMapping.mkFileContent files
 
     let filesWithAutoOpen =
-        time
-            "filesWithAutoOpen"
-            (Array.choose (fun f ->
+        Array.choose
+            (fun f ->
                 if AlwaysLinkDetection.doesFileHasAutoOpenBehavior f.AST then
                     Some f.Idx
                 else
-                    None))
+                    None)
             trieInput
 
-    time
-        "link deps"
-        // Array.Parallel.map
-        Array.map
-        (fun (file: FileWithAST) ->
-            let fileContent = fileContents.[file.Idx]
-            let knownFiles = getFileNameBefore files file.Idx
+    let findDependencies (file: FileWithAST) : int * int array =
+        let fileContent = fileContents.[file.Idx]
+        let knownFiles = getFileNameBefore files file.Idx
 
-            // Process all entries of a file and query the trie when required to find the dependent files.
-            let result =
-                // Seq is faster than List in this case.
-                Seq.fold (processStateEntry queryTrie) (FileContentQueryState.Create file.Idx knownFiles) fileContent
+        // Process all entries of a file and query the trie when required to find the dependent files.
+        let result =
+            // Seq is faster than List in this case.
+            Seq.fold (processStateEntry queryTrie) (FileContentQueryState.Create file.Idx knownFiles) fileContent
 
-            // after processing the file we should verify if any of the open statements are found in the trie but do not yield any file link.
-            let ghostDependencies = collectGhostDependencies file.Idx trie queryTrie result
+        // after processing the file we should verify if any of the open statements are found in the trie but do not yield any file link.
+        let ghostDependencies = collectGhostDependencies file.Idx trie queryTrie result
 
-            // Automatically add all files that came before the current file that use the [<AutoOpen>] attribute.
-            let topLevelAutoOpenFiles =
-                if Array.isEmpty filesWithAutoOpen then
-                    Array.empty
-                else
-                    [| 0 .. (file.Idx - 1) |].Intersect(filesWithAutoOpen).ToArray()
+        // Automatically add all files that came before the current file that use the [<AutoOpen>] attribute.
+        let topLevelAutoOpenFiles =
+            if Array.isEmpty filesWithAutoOpen then
+                Array.empty
+            else
+                [| 0 .. (file.Idx - 1) |].Intersect(filesWithAutoOpen).ToArray()
 
-            let allDependencies =
-                set
-                    [|
-                        yield! result.FoundDependencies
-                        yield! ghostDependencies
-                        yield! topLevelAutoOpenFiles
-                    |]
+        let allDependencies =
+            [|
+                yield! result.FoundDependencies
+                yield! ghostDependencies
+                yield! topLevelAutoOpenFiles
+            |]
+            |> Array.distinct
 
-            file, Set.toArray allDependencies)
-        files
+        file.Idx, allDependencies
+
+    Array.Parallel.map findDependencies files |> readOnlyDict
 
 // =============================================================================================================
 // =============================================================================================================
@@ -249,25 +242,26 @@ open FSharp.Compiler.Service.Tests.Common
 let mkGraphAndReport files =
     let filesWithAST =
         files
-        |> Array.mapi (fun idx file ->
+        |> Array.Parallel.mapi (fun idx file ->
             {
                 Idx = idx
                 AST = parseSourceCode (file, System.IO.File.ReadAllText(file))
                 File = file
             })
 
-    let graph = time "mkGraph" mkGraph filesWithAST
+    let _graph = mkGraph filesWithAST
+    ()
 
-    for fileName, deps in graph do
-        let depString =
-            deps
-            |> Array.map (fun depIdx -> filesWithAST.[depIdx].File)
-            |> String.concat "\n    "
-
-        if deps.Length = 0 then
-            printfn $"%s{fileName.File}: []"
-        else
-            printfn $"%s{fileName.File}:\n    {depString}"
+// for KeyValue (fileIdx, deps) in graph do
+//     let depString =
+//         deps |> Array.map (fun dep -> filesWithAST.[dep].File) |> String.concat "\n    "
+//
+//     let fileName = filesWithAST.[fileIdx]
+//
+//     if deps.Length = 0 then
+//         printfn $"%s{fileName.File}: []"
+//     else
+//         printfn $"%s{fileName.File}:\n    {depString}"
 
 [<Test>]
 let ``Fantomas.Core for realzies`` () =
@@ -615,6 +609,7 @@ let fcsFiles =
 let ``FCS for realzies`` () = mkGraphAndReport fcsFiles
 
 [<Test>]
+[<Explicit "To be removed">]
 let ``FCS for debugging`` () =
     let filesWithAST =
         fcsFiles
@@ -958,5 +953,5 @@ let ``Supported scenario`` (scenario: Scenario) =
     let graph = mkGraph (Array.map fst scenario.Files)
 
     for file, expectedDeps in scenario.Files do
-        let actualDeps = graph |> Array.find (fun (f, _) -> f.File = file.File) |> snd
+        let actualDeps = graph.[file.Idx]
         Assert.AreEqual(expectedDeps, actualDeps, $"Dependencies don't match for {System.IO.Path.GetFileName file.File}")
