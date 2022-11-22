@@ -946,6 +946,28 @@ let f a = a.B
 """
                     (set [| 0 |])
             ]
+        scenario
+            "Reference to property of static member from nested module is detected"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+module A
+
+module B =
+    type Person = {Name : string}
+    type C =
+        static member D: Person = failwith ""
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+module B
+let person: string = A.B.C.D.Name
+"""
+                    (set [| 0 |])
+            ]
     ]
 
 [<TestCaseSource(nameof codebases)>]
