@@ -59,8 +59,43 @@ let CheckMultipleInputsInParallel
         |> List.map (fun ast -> ast.FileName, ast)
         |> readOnlyDict
         |> ConcurrentDictionary<_, _>
-
+    
+    let fileMap =
+        sourceFiles
+        |> Array.map (fun f -> f.AST.FileName, f.Idx.Idx)
+        |> Map.ofArray
+    
+    let convertDep (dep: int) =
+        match sourceFiles[dep].AST with
+        | AST.ImplFile _ -> dep
+        | AST.SigFile _ ->
+            let sigFile = sourceFiles[dep].AST.FileName
+            let implFile = sigFile.TrimEnd('i')
+            fileMap[implFile]
+    
     let graph = DepResolving.DependencyResolution.detectFileDependencies sourceFiles
+    ParseAndCheckInputs.graph <-
+        let implIndices =
+            inputs
+            |> List.mapi (fun i x -> i, x)
+            |> List.choose (fun (i, ast) ->
+                match ast with
+                | AST.SigFile _ -> None
+                | AST.ImplFile _ -> Some i
+            )
+            |> List.mapi (fun i idx -> idx, i)
+            |> readOnlyDict
+        
+        let implGraph =
+            graph.Graph
+            |> Seq.map (fun (KeyValue(f, deps)) -> f, deps)
+            |> Seq.map (fun (f, deps) -> f.Idx.Idx, deps |> Array.map (fun f -> convertDep f.Idx.Idx))
+            |> Seq.filter (fun (f, _) -> implIndices.ContainsKey f)
+            |> Seq.map (fun (f, deps) ->
+                f |> fun x -> implIndices[x], deps |> Array.filter implIndices.ContainsKey |> Array.map (fun x -> implIndices[x])
+            )
+            |> readOnlyDict
+        implGraph
 
     let mutable nextIdx =
         (graph.Files |> Array.map (fun f -> f.File.Idx.Idx) |> Array.max) + 1
@@ -261,6 +296,6 @@ let CheckMultipleInputsInParallel
                 (fun file -> file.Idx.Idx)
                 state
                 (fun it -> not <| it.Name.EndsWith(".fsix"))
-                10
+                12
 
         partialResults |> Array.toList, tcState)

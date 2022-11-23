@@ -1,8 +1,10 @@
 ﻿module ParallelTypeCheckingTests.TestCompilation
 
+open FSharp.Compiler.OptimizeInputs
 open FSharp.Test
 open FSharp.Test.Compiler
 open NUnit.Framework
+open ParallelTypeCheckingTests.Code
 open ParallelTypeCheckingTests.TestUtils
 open FSharp.Compiler
 
@@ -298,7 +300,7 @@ let codebases = Codebases.all
 
 [<TestCaseSource(nameof codebases)>]
 let ``Compile a valid project using graph-based type-checking`` (project: FProject) =
-    global.FSharp.Compiler.OptimizeInputs.UseParallelOptimizer <- false
+    global.FSharp.Compiler.OptimizeInputs.optimizerMode <- OptimizerMode.Sequential
     compileAValidProject
         {
             Method = Method.Graph
@@ -307,7 +309,18 @@ let ``Compile a valid project using graph-based type-checking`` (project: FProje
         
 [<TestCaseSource(nameof codebases)>]
 let ``Compile a valid project using graph-based type-checking, parallel opt`` (project: FProject) =
-    global.FSharp.Compiler.OptimizeInputs.UseParallelOptimizer <- true
+    global.FSharp.Compiler.OptimizeInputs.optimizerMode <- OptimizerMode.PartiallyParallel
+    compileAValidProject
+        {
+            Method = Method.Graph
+            Project = project
+        }
+        
+
+[<TestCaseSource(nameof codebases)>]
+let ``Compile a valid project using graph-based type-checking, graph opt`` (project: FProject) =
+    global.FSharp.Compiler.OptimizeInputs.optimizerMode <- OptimizerMode.GraphBased
+    OptimizeInputs.goer <- GraphBasedOpt.goGraph |> Some
     compileAValidProject
         {
             Method = Method.Graph

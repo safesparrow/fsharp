@@ -6,10 +6,15 @@ open FSharp.Compiler.TcGlobals
 open FSharp.Compiler.TypedTree
 open FSharp.Compiler.TypedTreeOps
 
+type DeltaAndFull<'a> =
+    {
+        Delta: 'a
+        Full: 'a
+    }
 
 type OptimizeDuringCodeGen = bool -> Expr -> Expr
 type OptimizeRes =
-    (IncrementalOptimizationEnv * CheckedImplFile * ImplFileOptimizationInfo * SignatureHidingInfo) * OptimizeDuringCodeGen
+    (DeltaAndFull<IncrementalOptimizationEnv> * CheckedImplFile * ImplFileOptimizationInfo * DeltaAndFull<SignatureHidingInfo>) * OptimizeDuringCodeGen
 
 type Optimize =
     OptimizationSettings *
@@ -32,11 +37,11 @@ type Phase1Res = OptimizeRes
 type Phase1Fun = Phase1Inputs -> Phase1Res
 
 type Phase2Inputs = PhaseInputs
-type Phase2Res = IncrementalOptimizationEnv * CheckedImplFile
+type Phase2Res = DeltaAndFull<IncrementalOptimizationEnv> * CheckedImplFile
 type Phase2Fun = Phase2Inputs -> Phase2Res
 
 type Phase3Inputs = PhaseInputs
-type Phase3Res = IncrementalOptimizationEnv * CheckedImplFile
+type Phase3Res = DeltaAndFull<IncrementalOptimizationEnv> * CheckedImplFile
 type Phase3Fun = Phase3Inputs -> Phase3Res
 
 type Phase =

@@ -24,18 +24,21 @@ let processInParallel
     let mutable processedCount = 0
 
     let processItem item =
-        printfn $"Processing {_itemToString item}"
+        printfn $"{_itemToString item} Processing"
         let toSchedule = work item
+        printfn $"{_itemToString item} worked"
 
         let processedCount =
             lock processedCountLock (fun () ->
                 processedCount <- processedCount + 1
                 processedCount)
+        
+        printfn $"{_itemToString item} after lock"
 
         let toScheduleString =
             toSchedule |> Array.map _itemToString |> (fun names -> String.Join(", ", names))
 
-        printfn $"Scheduling {toSchedule.Length} items: {toScheduleString}"
+        printfn $"{_itemToString item} finished - scheduling {toSchedule.Length} items: {toScheduleString}"
         toSchedule |> Array.iter bc.Add
         processedCount
 

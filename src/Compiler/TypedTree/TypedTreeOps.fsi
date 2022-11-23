@@ -407,6 +407,8 @@ val mkExprAddrOfExpr:
 [<Struct; NoEquality; NoComparison>]
 type ValMap<'T> =
 
+    new : StampMap<'T> -> ValMap<'T>
+    
     member Contents: StampMap<'T>
 
     member Item: Val -> 'T with get

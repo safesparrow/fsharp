@@ -74,7 +74,7 @@ let collectResults (inputs: CollectorInputs) : CollectorOutputs =
             let (optEnvPhase1, _, _, _), _ = phase1
             optEnvPhase1
             
-    files, lastFilePhase1Env
+    files, lastFilePhase1Env.Full
 
 type Phase =
     | Phase1
@@ -179,8 +179,8 @@ let go (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFu
             let env, _, hidingInfo =
                 previous
                 |> Option.map getPhase1Res
-                |> Option.defaultValue (env0, file, hidingInfo0)
-            let inputs = env, hidingInfo, file
+                |> Option.defaultValue ({Delta=env0; Full=env0}, file, {Delta=hidingInfo0; Full=hidingInfo0})
+            let inputs = env.Full, hidingInfo.Full, file
             let phase1Res = phase1 inputs
             res.Phase1 <- Some phase1Res
             
@@ -194,14 +194,16 @@ let go (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFu
             
         | Phase.Phase2 ->
             // take env from previous file
-            let env, _ =
+            let env =
                 previous
                 |> Option.map getPhase2Res
-                |> Option.defaultValue (env0, file)
+                |> Option.map fst
+                |> Option.map (fun daf -> daf.Full)
+                |> Option.defaultValue env0
             let _optEnv, file, hidingInfo =
                 res
                 |> getPhase1Res
-            let inputs = env, hidingInfo, file
+            let inputs = env, hidingInfo.Full, file
             let phase2Res = phase2 inputs
             res.Phase2 <- Some phase2Res
             
@@ -219,14 +221,16 @@ let go (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFu
             let env =
                 previous
                 |> Option.map getPhase3Res
+                |> Option.map (fun daf -> daf.Full)
                 |> Option.defaultValue env0
             // impl file
             let _, file =
                 res
                 |> getPhase2Res
-            let _phase1Env, _, hidingInfo =
+            let hidingInfo =
                 res
                 |> getPhase1Res
+                |> fun (a,b,c) -> c.Full
             let inputs = env, hidingInfo, file
             let phase3Res = phase3 inputs
             res.Phase3 <- Some phase3Res
@@ -260,7 +264,7 @@ let go (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFu
     let collected = results |> collectResults
     collected
 
-type Goer = IReadOnlyDictionary<int, int> -> IncrementalOptimizationEnv -> FilePhaseFuncs -> CheckedImplFile[] -> CollectorOutputs
+type Goer = IReadOnlyDictionary<int, int[]> -> IncrementalOptimizationEnv -> FilePhaseFuncs -> CheckedImplFile[] -> CollectorOutputs
 
 let mutable goer: Goer option = None
 
@@ -270,7 +274,7 @@ type OptimizerMode =
     | PartiallyParallel
     | GraphBased
 
-let mutable OptimizerMode: OptimizerMode = OptimizerMode.Sequential
+let mutable optimizerMode: OptimizerMode = OptimizerMode.Sequential
 
 let ApplyAllOptimizations
     (
@@ -317,9 +321,21 @@ let ApplyAllOptimizations
     
     let env0 = optEnv0
     
+    let envToDaf (env: IncrementalOptimizationEnv) (env0: IncrementalOptimizationEnv) =
+        {
+            Full = env
+            Delta = subtractEnv env env0
+        }
+    
+    let hiddenToDaf (env: SignatureHidingInfo) (env0: SignatureHidingInfo) =
+        {
+            Full = env
+            Delta = subtractHidingInfo env env0
+        }
+        
     let phase1 (env: IncrementalOptimizationEnv, hidden: SignatureHidingInfo, implFile: CheckedImplFile) : Phase1Res =
         //ReportTime tcConfig ("Initial simplify")
-        Optimizer.OptimizeImplFile(
+        let (a,b,c,d), e = Optimizer.OptimizeImplFile(
             optSettings,
             ccu,
             tcGlobals,
@@ -332,6 +348,9 @@ let ApplyAllOptimizations
             hidden,
             implFile
         )
+        let a = envToDaf a env
+        let d = hiddenToDaf d hidden
+        (a,b,c,d),e
     
     let phase2 (env: IncrementalOptimizationEnv, hidden: SignatureHidingInfo, implFile: CheckedImplFile) : Phase2Res =
         let implFile = LowerLocalMutables.TransformImplFile tcGlobals importMap implFile
@@ -369,9 +388,9 @@ let ApplyAllOptimizations
                 )
 
             //PrintWholeAssemblyImplementation tcConfig outfile (sprintf "extra-loop-%d" n) implFile
-            optEnvExtraLoop, implFile
+            envToDaf optEnvExtraLoop env, implFile
         else
-            env, implFile
+            {Delta = IncrementalOptimizationEnv.Empty; Full = env}, implFile
         
     let phase3 (env: IncrementalOptimizationEnv, hidden: SignatureHidingInfo, implFile: CheckedImplFile) : Phase3Res =
         // Only do this on the first pass!
@@ -418,16 +437,19 @@ let ApplyAllOptimizations
                 )
 
             //PrintWholeAssemblyImplementation tcConfig outfile "post-rec-opt" implFile
-            optEnvFinalSimplify, implFile
+            envToDaf optEnvFinalSimplify env, implFile
         else
-            env, implFile
+            {Delta = IncrementalOptimizationEnv.Empty; Full = env}, implFile
     
     let results, optEnvFirstLoop =
-        match OptimizerMode with
+        match optimizerMode with
         | OptimizerMode.GraphBased ->
-            let graph =
-                [||]
-                |> readOnlyDict
+            let graph = ParseAndCheckInputs.graph
+            graph
+            |> Seq.iter (fun (KeyValue(f, deps)) ->
+                let d = System.String.Join(",", deps)
+                printfn $"{f} - {d}"
+            )
             let goer = goer.Value
             let a, b =
                 goer graph env0 (phase1, phase2, phase3) (implFiles |> List.toArray)

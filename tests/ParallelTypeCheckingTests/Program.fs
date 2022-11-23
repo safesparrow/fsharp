@@ -4,6 +4,7 @@
 
 open FSharp.Compiler
 open FSharp.Compiler.CompilerConfig
+open FSharp.Compiler.OptimizeInputs
 open ParallelTypeCheckingTests.TestCompilation
 open ParallelTypeCheckingTests.TestUtils
 
@@ -34,7 +35,14 @@ open ParallelTypeCheckingTests.TestCompilationFromCmdlineArgs
 let main _argv =
     ParseAndCheckInputs.CheckMultipleInputsUsingGraphMode <-
             ParallelTypeChecking.CheckMultipleInputsInParallel
-    OptimizeInputs.UseParallelOptimizer <- bool.Parse(_argv[0])
+    FSharp.Compiler.OptimizeInputs.goer <- ParallelTypeCheckingTests.Code.GraphBasedOpt.goGraph |> Some
+    let mode =
+        match _argv[0] with
+        | "graph" -> OptimizerMode.GraphBased
+        | "sequential" -> OptimizerMode.Sequential
+        | "partial" -> OptimizerMode.PartiallyParallel
+        | _ -> failwith $"unknown mode {_argv[0]}"
+    OptimizeInputs.optimizerMode <- mode
     // let args = _parse _argv
     // let args = { args with LineLimit = None }
     let componentTests = codebases[System.Int32.Parse(_argv[1])]

@@ -2,6 +2,7 @@
 
 #nowarn "1182"
 
+open System.Collections.Generic
 open System.IO
 open FSharp.Compiler.Optimizer
 open FSharp.Compiler.Service.Driver.OptimizeTypes
@@ -33,7 +34,7 @@ let collectResults (inputs: CollectorInputs) : CollectorOutputs =
             let (optEnvPhase1, _, _, _), _ = phase1
             optEnvPhase1
             
-    files, lastFilePhase1Env
+    files, lastFilePhase1Env.Full
 
 type FilePhaseFuncs = Phase1Fun * Phase2Fun * Phase3Fun   
 type FileResults =
@@ -104,11 +105,24 @@ let mergeHidingInfos (empty: SignatureHidingInfo) (infos: SignatureHidingInfo[])
 
 type Goer = IdxGraph -> IncrementalOptimizationEnv -> FilePhaseFuncs -> CheckedImplFile[] -> CollectorOutputs
 
-let goGraph (idxGraph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFuncs) (files: CheckedImplFile[]) : CollectorOutputs =
+let goGraph (idxGraph: IReadOnlyDictionary<int, int[]>) (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFuncs) (files: CheckedImplFile[]) : CollectorOutputs =
     // Create a 3x graph by cloning each file with its deps for each phase. Add links from phase3 -> phase2 -> phase1
+    let idxGraph =
+        idxGraph
+        // Temporary to workaround a bug in graph creation
+        |> Seq.map (fun (KeyValue(f, deps)) ->
+            f, deps |> Array.filter (fun d -> d <> f)
+        )
+        |> readOnlyDict
     let graph =
         idxGraph
         |> Seq.collect (fun (KeyValue(file, deps)) ->
+            let deps =
+                deps
+                // Temporary to workaround a bug in graph creation
+                |> Array.filter (fun d -> d <> file)
+                |> Array.map FileIdx 
+            let file = FileIdx file
             // Create a node per each phase
             Phase.all
             |> Array.map (fun phase ->
@@ -128,6 +142,12 @@ let goGraph (idxGraph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, ph
         )
         |> readOnlyDict
         
+    graph
+    |> Seq.iter (fun (KeyValue(f, deps)) ->
+        let d = System.String.Join(",", deps)
+        printfn $"{f}  ==>  {d}"
+    )
+        
     let mergeEnvs envs =
         mergeEnvs env0 envs
         
@@ -137,12 +157,12 @@ let goGraph (idxGraph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, ph
 
     let results =
         Array.init files.Length (fun _ -> FileResults.Empty)
-    let getRes (FileIdx idx) = results[idx]
+    let getRes idx = results[idx]
     let hidingInfo0 = SignatureHidingInfo.Empty
     
     let work (x: Node) : unit =
-        let {Idx=idx; Phase=phase} = x
-        let file = files[idx.Idx]
+        let {Idx=FileIdx idx; Phase=phase} = x
+        let file = files[idx]
         let res = getRes idx
         let depResults =
             transitiveIdxGraph[idx]
@@ -155,14 +175,14 @@ let goGraph (idxGraph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, ph
                 depResults
                 |> Array.map (fun r ->
                     let (a,_b,_c,_d), _e = r.Get1()
-                    a
+                    a.Delta
                 )
                 |> mergeEnvs
             let hidingInfo =
                 depResults
                 |> Array.map (fun r ->
                     let (_a,_b,_c,d), _e = r.Get1()
-                    d
+                    d.Delta
                 )
                 |> mergeHidingInfos hidingInfo0
             let inputs = env, hidingInfo, file
@@ -174,12 +194,12 @@ let goGraph (idxGraph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, ph
                 depResults
                 |> Array.map (fun r ->
                     let a,_b = r.Get2()
-                    a
+                    a.Delta
                 )
                 |> mergeEnvs
             // Get file and hidingInfo from phase1 of the current file
             let (_optEnv, file, _, hidingInfo), _ = res.Get1()
-            let inputs = env, hidingInfo, file
+            let inputs = env, hidingInfo.Full, file
             let phase2Res = phase2 inputs
             res.Phase2 <- Some phase2Res
         | Phase.Phase3 ->
@@ -188,21 +208,23 @@ let goGraph (idxGraph: IdxGraph) (env0: IncrementalOptimizationEnv) ((phase1, ph
                 depResults
                 |> Array.map (fun r ->
                     let a,_b = r.Get3()
-                    a
+                    a.Delta
                 )
                 |> mergeEnvs
             // Get file and hidingInfo from phase1 of the current file
             let (_optEnv, _, _, hidingInfo), _ = res.Get1()
             // Get impl file from phase2
             let _, file = res.Get2()
-            let inputs = env, hidingInfo, file
+            let inputs = env, hidingInfo.Full, file
             let phase3Res = phase3 inputs
             res.Phase3 <- Some phase3Res
+        
+        printfn $"{x} finished"
     
     GraphProcessing.processGraphSimpler<Node>
         graph
         work
-        1
+        12
     
     let completeResults = results |> Array.map FileResults.complete
     let collected = collectResults completeResults

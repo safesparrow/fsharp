@@ -487,14 +487,45 @@ let mergeMaps<'Key, 'Value when 'Key : comparison> (maps: Map<'Key, 'Value>[]) =
     |> Array.collect Map.toArray
     |> Map.ofArray
 
+let mapDiff<'a,'b when 'a: comparison> (a: Map<'a,'b>) (b: Map<'a,'b>) : Map<'a,'b> =
+    a
+    // TODO What if a & b contain a key but with different values? Is that possible?
+    |> Seq.choose (fun (KeyValue(k, v)) ->
+        match a.TryFind k with
+        | Some _ -> None
+        | None -> Some (k, v)
+    )
+    |> Map.ofSeq
 
+let subtractEnv (a: IncrementalOptimizationEnv) (b: IncrementalOptimizationEnv): IncrementalOptimizationEnv =
+    {
+      a with
+          //latestBoundId = env0.latestBoundId // Not used across files
+          dontInline = Zset.diff a.dontInline b.dontInline// sum
+          typarInfos = a.typarInfos |> List.skip b.typarInfos.Length // sum
+          //functionVal = None // Not used across files 
+          dontSplitVars = ValMap(mapDiff a.dontSplitVars.Contents b.dontSplitVars.Contents) // sum
+          //disableMethodSplitting = false // not used across files
+          localExternalVals = mapDiff a.localExternalVals b.localExternalVals // sum 
+          globalModuleInfos = mapDiff a.globalModuleInfos b.globalModuleInfos // sum
+          //methEnv = { pipelineCount = 0 } // Not used across files
+    }
+
+let subtractHidingInfo (a: SignatureHidingInfo) (b: SignatureHidingInfo) : SignatureHidingInfo =
+    {
+        SignatureHidingInfo.HiddenTycons = Zset.diff a.HiddenTycons b.HiddenTycons
+        HiddenTyconReprs = Zset.diff a.HiddenTyconReprs b.HiddenTyconReprs
+        HiddenVals = Zset.diff a.HiddenVals b.HiddenVals
+        HiddenRecdFields = Zset.diff a.HiddenRecdFields b.HiddenRecdFields
+        HiddenUnionCases = Zset.diff a.HiddenUnionCases b.HiddenUnionCases
+    }
 
 let mergeEnvs (env0: IncrementalOptimizationEnv) (envs: IncrementalOptimizationEnv[]): IncrementalOptimizationEnv =
     let envs = Array.append [|env0|] envs
     // TODO use a single HashSet for perf?
     let dontInline =
         envs
-        |> Array.collect (fun e -> e.dontInline |> Zset.elements |> List.toArray)
+        |> Array.collect (fun e -> e.dontInline.ToArray())
         |> fun xs -> Zset.Create (Int64.order, xs)
     let typarInfos = envs |> Array.toList |> List.collect (fun e -> e.typarInfos)
     let dontSplitVars =

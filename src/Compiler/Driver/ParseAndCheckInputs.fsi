@@ -228,3 +228,5 @@ val CheckOneInputAndFinish:
     tcState: TcState *
     input: ParsedInput ->
         Cancellable<(TcEnv * TopAttribs * CheckedImplFile list * ModuleOrNamespaceType list) * TcState>
+
+val mutable graph: System.Collections.Generic.IReadOnlyDictionary<int, int[]>

@@ -53,7 +53,7 @@ val NormalizeAssemblyRefs: CompilationThreadToken * ILGlobals * TcImports -> (IL
 val GetGeneratedILModuleName: CompilerTarget -> string -> string
 
 type FilePhaseFuncs = Phase1Fun * Phase2Fun * Phase3Fun   
-type Goer = IReadOnlyDictionary<int, int> -> IncrementalOptimizationEnv -> FilePhaseFuncs -> CheckedImplFile[] -> CollectorOutputs
+type Goer = IReadOnlyDictionary<int, int[]> -> IncrementalOptimizationEnv -> FilePhaseFuncs -> CheckedImplFile[] -> CollectorOutputs
 val mutable goer: Goer option
 
 type OptimizerMode =
@@ -61,4 +61,4 @@ type OptimizerMode =
     | PartiallyParallel
     | GraphBased
 
-val mutable OptimizerMode: OptimizerMode
+val mutable optimizerMode: OptimizerMode

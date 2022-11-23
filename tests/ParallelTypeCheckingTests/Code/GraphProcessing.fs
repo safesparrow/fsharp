@@ -428,7 +428,9 @@ let processGraphSimpler<'Item when 'Item: equality and 'Item: comparison>
         : Node3<'Item>[]
         =
         let _deps = lookupMany node.Info.Deps
+        printfn $"{node.Info.Item} DoWork"
         doWork node.Info.Item
+        printfn $"{node.Info.Item} DoneWork"
         // Need to double-check that only one dependency schedules this dependant
         let unblocked =
             node.Info.Dependants
@@ -441,6 +443,7 @@ let processGraphSimpler<'Item when 'Item: equality and 'Item: comparison>
                         x.ProcessedDepsCount)
                 pdc = x.Info.Deps.Length
             )
+        printfn $"{node.Info.Item} unblocked gathered"
         unblocked
 
     use cts = new CancellationTokenSource()
