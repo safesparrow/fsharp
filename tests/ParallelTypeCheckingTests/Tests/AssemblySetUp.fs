@@ -3,6 +3,7 @@
 open NUnit.Framework
 open OpenTelemetry.Trace
 
+
 /// One-time setup for NUnit tests
 [<SetUpFixture>]
 type AssemblySetUp() =
@@ -12,7 +13,7 @@ type AssemblySetUp() =
     member this.SetUp() =
         FSharp.Compiler.ParseAndCheckInputs.CheckMultipleInputsUsingGraphMode <-
             ParallelTypeCheckingTests.ParallelTypeChecking.CheckMultipleInputsInParallel
-
+        FSharp.Compiler.OptimizeInputs.goer <- ParallelTypeCheckingTests.Code.GraphBasedOpt.goGraph |> Some
         tracerProvider <- ParallelTypeCheckingTests.TestUtils.setupOtel () |> Some
 
     [<OneTimeTearDown>]

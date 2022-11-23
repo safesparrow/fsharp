@@ -61,6 +61,12 @@ type CcuOptimizationInfo = LazyModuleInfo
 type IncrementalOptimizationEnv =
     static member Empty: IncrementalOptimizationEnv
 
+val mergeEnvs : IncrementalOptimizationEnv -> IncrementalOptimizationEnv[] -> IncrementalOptimizationEnv
+
+val subtractEnv : IncrementalOptimizationEnv -> IncrementalOptimizationEnv -> IncrementalOptimizationEnv
+
+val subtractHidingInfo : SignatureHidingInfo -> SignatureHidingInfo -> SignatureHidingInfo
+
 /// For building optimization environments incrementally
 val internal BindCcu:
     CcuThunk -> CcuOptimizationInfo -> IncrementalOptimizationEnv -> TcGlobals -> IncrementalOptimizationEnv

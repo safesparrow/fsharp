@@ -1,9 +1,12 @@
 ﻿module ParallelTypeCheckingTests.TestCompilation
 
+open FSharp.Compiler.OptimizeInputs
 open FSharp.Test
 open FSharp.Test.Compiler
 open NUnit.Framework
+open ParallelTypeCheckingTests.Code
 open ParallelTypeCheckingTests.TestUtils
+open FSharp.Compiler
 
 type FProject =
     {
@@ -118,11 +121,23 @@ let b = 1
             "A.fs",
             """
 namespace A
+module A1 =
+    let x = 3
+    type X = X of int
+    let y = X 5
+    let foo () = 5
+    let inline bar () = 7
+    module B2 =
+        let a = "lalala"
 """
             "B.fs",
             """
 module B
 open A
+let z = A.A1.x
+let y = A.A1.y
+let g = A.A1.x + 2
+let h = A.A1.bar()
 """
         ]
         |> FProject.Make CompileOutput.Library
@@ -193,6 +208,47 @@ let d (c: CType) =
         ]
         |> FProject.Make CompileOutput.Library
 
+    let fullyParallel =
+        [
+            "A.fs",
+            """
+module A
+let x = 1
+"""
+            "B.fs",
+            """
+module B
+let x = 1
+"""
+            "C.fs",
+            """
+module C
+let x = 1
+"""
+            "D.fs",
+            """
+module D
+let x = 1
+"""
+            "E.fs",
+            """
+module E
+let x = 1
+"""
+            "F.fs",
+            """
+module F
+let x = 1
+"""
+            "G.fs",
+            """
+module G
+let x = 1
+"""
+        ]
+        |> FProject.Make CompileOutput.Library
+
+    
     let all =
         [
             encodeDecodeSimple
@@ -200,6 +256,7 @@ let d (c: CType) =
             fsFsi
             emptyNamespace
             dependentSignatures
+            fullyParallel
         ]
 
 type Case =
@@ -221,7 +278,7 @@ let withMethod (method: Method) (cu: CompilationUnit) : CompilationUnit =
     | CompilationUnit.FS cs ->
         FS
             { cs with
-                Options = cs.Options @ (methodOptions method)
+                Options = cs.Options @ (methodOptions method) @ ["--optimize+"]
             }
     | cu -> cu
 
@@ -240,8 +297,30 @@ let compileAValidProject (x: Case) =
 
 let codebases = Codebases.all
 
+
 [<TestCaseSource(nameof codebases)>]
 let ``Compile a valid project using graph-based type-checking`` (project: FProject) =
+    global.FSharp.Compiler.OptimizeInputs.optimizerMode <- OptimizerMode.Sequential
+    compileAValidProject
+        {
+            Method = Method.Graph
+            Project = project
+        }
+        
+[<TestCaseSource(nameof codebases)>]
+let ``Compile a valid project using graph-based type-checking, parallel opt`` (project: FProject) =
+    global.FSharp.Compiler.OptimizeInputs.optimizerMode <- OptimizerMode.PartiallyParallel
+    compileAValidProject
+        {
+            Method = Method.Graph
+            Project = project
+        }
+        
+
+[<TestCaseSource(nameof codebases)>]
+let ``Compile a valid project using graph-based type-checking, graph opt`` (project: FProject) =
+    global.FSharp.Compiler.OptimizeInputs.optimizerMode <- OptimizerMode.GraphBased
+    OptimizeInputs.goer <- GraphBasedOpt.goGraph |> Some
     compileAValidProject
         {
             Method = Method.Graph

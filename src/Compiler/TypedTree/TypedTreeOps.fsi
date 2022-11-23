@@ -407,6 +407,8 @@ val mkExprAddrOfExpr:
 [<Struct; NoEquality; NoComparison>]
 type ValMap<'T> =
 
+    new : StampMap<'T> -> ValMap<'T>
+    
     member Contents: StampMap<'T>
 
     member Item: Val -> 'T with get
@@ -424,6 +426,8 @@ type ValMap<'T> =
     static member Empty: ValMap<'T>
 
     static member OfList: (Val * 'T) list -> ValMap<'T>
+    
+    static member OfArray': (Stamp * 'T)[] -> ValMap<'T>
 
 /// Mutable data structure mapping Val's to T based on stamp keys
 [<Sealed; NoEquality; NoComparison>]
@@ -1269,6 +1273,8 @@ type SignatureHidingInfo =
 
     /// The empty table representing no hiding
     static member Empty: SignatureHidingInfo
+    
+    static member Union: SignatureHidingInfo -> SignatureHidingInfo -> SignatureHidingInfo
 
 /// Compute the remapping information implied by a signature being inferred for a particular implementation
 val ComputeRemappingFromImplementationToSignature:

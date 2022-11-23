@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net7.0</TargetFrameworks>
+    <TargetFramework>net7.0</TargetFramework>
     <OutputType>Library</OutputType>
     <GenerateProgramFile>false</GenerateProgramFile>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
@@ -10,7 +10,7 @@
     <IsTestProject>true</IsTestProject>
     <ExcludeFromSourceBuild>true</ExcludeFromSourceBuild>
     <Optimize>false</Optimize>
-    <Tailcalls>false</Tailcalls>
+    <Tailcalls>true</Tailcalls>
     <OtherFlags>$(OtherFlags) --warnon:1182</OtherFlags>
     <NoWarn>$(NoWarn);FS0988;FS1182</NoWarn> <!-- "program does nothing" warning -->
     <DefineConstants Condition="'$(Configuration)'=='release'">$(DefineConstants);RELEASE</DefineConstants>
@@ -37,6 +37,13 @@
     <Compile Include="Code\Parallel.fs" />
     <Compile Include="Code\GraphProcessing.fs" />
     <Compile Include="Code\ParallelTypeChecking.fs" />
+    <Compile Include="Code\TrieApproach\Types.fs" />
+    <Compile Include="Code\TrieApproach\TrieMapping.fs" />
+    <Compile Include="Code\TrieApproach\FileContentMapping.fs" />
+    <Compile Include="Code\TrieApproach\AutoOpenDetection.fs" />
+    <Compile Include="Code\TrieApproach\DependencyResolution.fs" />
+    <Compile Include="Code\TrieApproach\SampleData.fs" />
+    <Compile Include="Code\GraphBasedOpt.fs" />
     <Compile Include="Tests\Utils.fs" />
     <Compile Include="Tests\AssemblySetUp.fs" />
     <Compile Include="Tests\TestASTVisit.fs" />

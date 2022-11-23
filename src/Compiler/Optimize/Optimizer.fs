@@ -441,6 +441,7 @@ type MethodEnv =
 
     override x.ToString() = "<MethodEnv>"
 
+
 type IncrementalOptimizationEnv =
     { /// An identifier to help with name generation
       latestBoundId: Ident option
@@ -480,6 +481,78 @@ type IncrementalOptimizationEnv =
           methEnv = { pipelineCount = 0 } }
 
     override x.ToString() = "<IncrementalOptimizationEnv>"
+
+let mergeMaps<'Key, 'Value when 'Key : comparison> (maps: Map<'Key, 'Value>[]) =
+    maps
+    |> Array.collect Map.toArray
+    |> Map.ofArray
+
+let mapDiff<'a,'b when 'a: comparison> (a: Map<'a,'b>) (b: Map<'a,'b>) : Map<'a,'b> =
+    a
+    // TODO What if a & b contain a key but with different values? Is that possible?
+    |> Seq.choose (fun (KeyValue(k, v)) ->
+        match b.TryFind k with
+        | Some _ -> None
+        | None -> Some (k, v)
+    )
+    |> Map.ofSeq
+
+let subtractEnv (a: IncrementalOptimizationEnv) (b: IncrementalOptimizationEnv): IncrementalOptimizationEnv =
+    {
+      a with
+          //latestBoundId = env0.latestBoundId // Not used across files
+          dontInline = Zset.diff a.dontInline b.dontInline// sum
+          typarInfos = a.typarInfos |> List.skip b.typarInfos.Length // sum
+          //functionVal = None // Not used across files 
+          dontSplitVars = ValMap(mapDiff a.dontSplitVars.Contents b.dontSplitVars.Contents) // sum
+          //disableMethodSplitting = false // not used across files
+          localExternalVals = mapDiff a.localExternalVals b.localExternalVals // sum 
+          globalModuleInfos = mapDiff a.globalModuleInfos b.globalModuleInfos // sum
+          //methEnv = { pipelineCount = 0 } // Not used across files
+    }
+
+let subtractHidingInfo (a: SignatureHidingInfo) (b: SignatureHidingInfo) : SignatureHidingInfo =
+    {
+        SignatureHidingInfo.HiddenTycons = Zset.diff a.HiddenTycons b.HiddenTycons
+        HiddenTyconReprs = Zset.diff a.HiddenTyconReprs b.HiddenTyconReprs
+        HiddenVals = Zset.diff a.HiddenVals b.HiddenVals
+        HiddenRecdFields = Zset.diff a.HiddenRecdFields b.HiddenRecdFields
+        HiddenUnionCases = Zset.diff a.HiddenUnionCases b.HiddenUnionCases
+    }
+
+let mergeEnvs (env0: IncrementalOptimizationEnv) (envs: IncrementalOptimizationEnv[]): IncrementalOptimizationEnv =
+    let envs = Array.append [|env0|] envs
+    // TODO use a single HashSet for perf?
+    let dontInline =
+        envs
+        |> Array.collect (fun e -> e.dontInline.ToArray())
+        |> fun xs -> Zset.Create (Int64.order, xs)
+    let typarInfos = envs |> Array.toList |> List.collect (fun e -> e.typarInfos)
+    let dontSplitVars =
+        envs
+        |> Seq.collect (fun e -> e.dontSplitVars.Contents |> Map.toSeq)
+        |> Seq.toArray
+        |> ValMap.OfArray'
+    let localExternalVals =
+        envs
+        |> Array.map (fun e -> e.localExternalVals)
+        |> mergeMaps<Stamp, ValInfo>
+    let globalModuleInfos =
+        envs
+        |> Array.map (fun e -> e.globalModuleInfos)
+        |> mergeMaps
+    {
+      env0 with
+          //latestBoundId = env0.latestBoundId // Not used across files
+          dontInline = dontInline// sum
+          typarInfos = typarInfos // sum
+          //functionVal = None // Not used across files 
+          dontSplitVars = dontSplitVars // sum
+          //disableMethodSplitting = false // not used across files
+          localExternalVals = localExternalVals // sum 
+          globalModuleInfos = globalModuleInfos // sum
+          //methEnv = { pipelineCount = 0 } // Not used across files
+    }
 
 //-------------------------------------------------------------------------
 // IsPartialExprVal - is the expr fully known?
@@ -567,9 +640,9 @@ let BindExternalLocalVal cenv (v: Val) vval env =
 
     let vval = if v.IsMutable then {vval with ValExprInfo=UnknownValue } else vval
 
-    let env =
+    let acc =
         match vval.ValExprInfo with 
-        | UnknownValue -> env  
+        | UnknownValue -> env
         | _ ->
             { env with localExternalVals=env.localExternalVals.Add (v.Stamp, vval) }
     // If we're compiling fslib then also bind the value as a non-local path to 
@@ -579,14 +652,16 @@ let BindExternalLocalVal cenv (v: Val) vval env =
     // v, dereferencing it to find the corresponding signature Val, and adding an entry for the signature val.
     //
     // A similar code path exists in ilxgen.fs for the tables of "representations" for values
-    let env = 
-        if g.compilingFSharpCore then 
+    let env =
+        // TODO We ignore the fact this isn't delta-based for now.
+        if g.compilingFSharpCore then
+            failwith "FSharpCore optimization not supported on this PoC branch"
             // Passing an empty remap is sufficient for FSharp.Core.dll because it turns out the remapped type signature can
             // still be resolved.
             match tryRescopeVal g.fslibCcu Remap.Empty v with 
             | ValueSome vref -> BindValueForFslib vref.nlr v vval env 
             | _ -> env
-        else env
+        else acc
     env
 
 let rec BindValsInModuleOrNamespace cenv (mval: LazyModuleInfo) env =
@@ -4272,7 +4347,16 @@ and OptimizeModuleDefs cenv (env, bindInfosColl) defs =
     let defs, (env, bindInfosColl) = List.mapFold (OptimizeModuleContents cenv) (env, bindInfosColl) defs
     let defs, minfos = List.unzip defs
     (defs, UnionOptimizationInfos minfos), (env, bindInfosColl)
-   
+
+and mergeSignatureHidingInfos (a: SignatureHidingInfo) (b: SignatureHidingInfo) =
+    {
+        SignatureHidingInfo.HiddenTycons = Zset.union a.HiddenTycons b.HiddenTycons
+        HiddenTyconReprs = Zset.union a.HiddenTyconReprs b.HiddenTyconReprs
+        HiddenVals = Zset.union a.HiddenVals b.HiddenVals
+        HiddenRecdFields = Zset.union a.HiddenRecdFields b.HiddenRecdFields
+        HiddenUnionCases = Zset.union a.HiddenUnionCases b.HiddenUnionCases
+    }
+
 and OptimizeImplFileInternal cenv env isIncrementalFragment fsiMultiAssemblyEmit hidden implFile =
     let g = cenv.g
     let (CheckedImplFile (qname, pragmas, signature, contents, hasExplicitEntryPoint, isScript, anonRecdTypes, namedDebugPointsForInlinedCode)) = implFile
@@ -4298,7 +4382,8 @@ and OptimizeImplFileInternal cenv env isIncrementalFragment fsiMultiAssemblyEmit
         else
             // This optimizes and builds minfo w.r.t. the signature
             let mexprR, minfo = OptimizeModuleExprWithSig cenv env signature contents
-            let hidden = ComputeSignatureHidingInfoAtAssemblyBoundary signature hidden
+            let hiddenDelta = ComputeSignatureHidingInfoAtAssemblyBoundary signature SignatureHidingInfo.Empty
+            let hidden = mergeSignatureHidingInfos hidden hiddenDelta
             let minfoExternal = AbstractLazyModulInfoByHiding true hidden minfo
             let env =
                 // In F# interactive multi-assembly mode, internals are not accessible in the 'env' used intra-assembly
@@ -4311,7 +4396,7 @@ and OptimizeImplFileInternal cenv env isIncrementalFragment fsiMultiAssemblyEmit
 
     let implFileR = CheckedImplFile (qname, pragmas, signature, contentsR, hasExplicitEntryPoint, isScript, anonRecdTypes, namedDebugPointsForInlinedCode)
 
-    env, implFileR, minfo, hidden
+    env , implFileR, minfo, hidden
 
 /// Entry point
 let OptimizeImplFile (settings, ccu, tcGlobals, tcVal, importMap, optEnv, isIncrementalFragment, fsiMultiAssemblyEmit, emitTailcalls, hidden, mimpls) =

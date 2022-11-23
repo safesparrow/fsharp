@@ -2,10 +2,12 @@
 
 open FSharp.Compiler.CompilerConfig
 open FSharp.Compiler.DiagnosticsLogger
+open FSharp.Compiler.OptimizeInputs
 open NUnit.Framework
 open System
 open FSharp.Compiler
 open ParallelTypeCheckingTests
+open ParallelTypeCheckingTests.Code
 open ParallelTypeCheckingTests.TestUtils
 
 type Codebase =
@@ -75,7 +77,7 @@ let internal TestCompilerFromArgs (config: Args) : unit =
 
     try
         let args = setupParsed config
-        let exit: int = CommandLineMain.mainAux (args, true, Some exiter)
+        let exit: int = CommandLineMain.mainAux (args, false, Some exiter) // TODO reset to true
         Assert.That(exit, Is.Zero)
     finally
         Environment.CurrentDirectory <- oldWorkDir
@@ -91,6 +93,7 @@ let internal codebaseToConfig code method =
 [<TestCaseSource(nameof (codebases))>]
 [<Explicit("Slow, only useful as a sanity check that the test codebase is sound and type-checks using the old method")>]
 let ``1. Test sequential type-checking`` (code: Codebase) =
+    OptimizeInputs.optimizerMode <- OptimizerMode.Sequential
     let config = codebaseToConfig code Method.Sequential
     TestCompilerFromArgs config
 
@@ -98,6 +101,7 @@ let ``1. Test sequential type-checking`` (code: Codebase) =
 [<TestCaseSource(nameof (codebases))>]
 [<Explicit("Slow, only useful as a sanity check that the test codebase is sound and type-checks using the parallel-fs method")>]
 let ``2. Test parallelfs type-checking`` (code: Codebase) =
+    OptimizeInputs.optimizerMode <- OptimizerMode.Sequential
     let config = codebaseToConfig code Method.ParallelCheckingOfBackedImplFiles
     TestCompilerFromArgs config
 
@@ -105,4 +109,20 @@ let ``2. Test parallelfs type-checking`` (code: Codebase) =
 [<TestCaseSource(nameof (codebases))>]
 let ``3. Test graph-based type-checking`` (code: Codebase) =
     let config = codebaseToConfig code Method.Graph
+    OptimizeInputs.optimizerMode <- OptimizerMode.Sequential
     TestCompilerFromArgs config
+
+/// Before running this test, you must prepare the codebase by running the script 'FCS.prepare.ps1'
+[<TestCaseSource(nameof (codebases))>]
+let ``4. Test graph-based type-checking - partially parallel opt`` (code: Codebase) =
+    let config = codebaseToConfig code Method.Graph
+    OptimizeInputs.optimizerMode <- OptimizerMode.PartiallyParallel
+    TestCompilerFromArgs config
+    
+/// Before running this test, you must prepare the codebase by running the script 'FCS.prepare.ps1'
+[<TestCaseSource(nameof (codebases))>]
+let ``4. Test graph-based type-checking - graph-based opt`` (code: Codebase) =
+    let config = codebaseToConfig code Method.Graph
+    OptimizeInputs.optimizerMode <- OptimizerMode.GraphBased
+    TestCompilerFromArgs config
+    OptimizeInputs.goer <- Some GraphBasedOpt.goGraph

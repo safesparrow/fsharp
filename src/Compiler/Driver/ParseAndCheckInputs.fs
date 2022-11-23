@@ -1755,3 +1755,5 @@ let CheckClosedInputSet (ctok, checkForErrors, tcConfig: TcConfig, tcImports, tc
 
     tcState.Ccu.Deref.Contents <- ccuContents
     tcState, topAttrs, declaredImpls, tcEnvAtEndOfLastFile
+
+let mutable graph: System.Collections.Generic.IReadOnlyDictionary<int, int[]> = null
