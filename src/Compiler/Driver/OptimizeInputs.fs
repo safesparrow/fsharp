@@ -445,11 +445,11 @@ let ApplyAllOptimizations
         match optimizerMode with
         | OptimizerMode.GraphBased ->
             let graph = ParseAndCheckInputs.graph
-            graph
-            |> Seq.iter (fun (KeyValue(f, deps)) ->
-                let d = System.String.Join(",", deps)
-                printfn $"{f} - {d}"
-            )
+            // graph
+            // |> Seq.iter (fun (KeyValue(f, deps)) ->
+            //     let d = System.String.Join(",", deps)
+            //     printfn $"{f} - {d}"
+            // )
             let goer = goer.Value
             let a, b =
                 goer graph env0 (phase1, phase2, phase3) (implFiles |> List.toArray)

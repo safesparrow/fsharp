@@ -141,12 +141,12 @@ let goGraph (idxGraph: IReadOnlyDictionary<int, int[]>) (env0: IncrementalOptimi
             )
         )
         |> readOnlyDict
-        
-    graph
-    |> Seq.iter (fun (KeyValue(f, deps)) ->
-        let d = System.String.Join(",", deps)
-        printfn $"{f}  ==>  {d}"
-    )
+    //     
+    // graph
+    // |> Seq.iter (fun (KeyValue(f, deps)) ->
+    //     let d = System.String.Join(",", deps)
+    //     printfn $"{f}  ==>  {d}"
+    // )
         
     let mergeEnvs envs =
         mergeEnvs env0 envs
@@ -219,7 +219,7 @@ let goGraph (idxGraph: IReadOnlyDictionary<int, int[]>) (env0: IncrementalOptimi
             let phase3Res = phase3 inputs
             res.Phase3 <- Some phase3Res
         
-        printfn $"{x} finished"
+        // printfn $"{x} finished"
     
     GraphProcessing.processGraphSimpler<Node>
         graph
