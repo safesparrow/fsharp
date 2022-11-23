@@ -6,10 +6,17 @@ open ParallelTypeCheckingTests
 type Scenario =
     {
         Name: string
-        Files: (FileWithAST * Set<int>) array
+        Files: FileInScenario array
     }
 
     override x.ToString() = x.Name
+
+and FileInScenario =
+    {
+        FileWithAST: FileWithAST
+        ExpectedDependencies: Set<int>
+        Content: string
+    }
 
 let scenario name files =
     let files = files |> List.toArray |> Array.mapi (fun idx f -> f idx)
@@ -17,12 +24,18 @@ let scenario name files =
 
 let sourceFile fileName content (dependencies: Set<int>) =
     fun idx ->
+        let fileWithAST =
+            {
+                Idx = idx
+                AST = parseSourceCode (fileName, content)
+                File = fileName
+            }
+
         {
-            Idx = idx
-            AST = parseSourceCode (fileName, content)
-            File = fileName
-        },
-        dependencies
+            FileWithAST = fileWithAST
+            ExpectedDependencies = dependencies
+            Content = content
+        }
 
 let codebases =
     [
