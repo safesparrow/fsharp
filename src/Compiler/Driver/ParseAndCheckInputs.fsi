@@ -152,8 +152,6 @@ val AddCheckResultsToTcState:
 
 type PartialResult = TcEnv * TopAttribs * CheckedImplFile option * ModuleOrNamespaceType
 
-val mutable fsiBackedInfos: System.Collections.Concurrent.ConcurrentDictionary<string, ModuleOrNamespaceType>
-
 type CheckArgs =
     CompilationThreadToken * (unit -> bool) * TcConfig * TcImports * TcGlobals * LongIdent option * TcState * (PhasedDiagnostic -> PhasedDiagnostic) * ParsedInput list
 
@@ -175,8 +173,6 @@ val CheckOneInput:
     input: ParsedInput *
     skipImplIfSigExists: bool ->
         Cancellable<(TcEnv * TopAttribs * CheckedImplFile option * ModuleOrNamespaceType) * TcState>
-
-val mutable asts: System.Collections.Concurrent.ConcurrentDictionary<string, ParsedInput>
 
 /// Check one input, returned as an Eventually computation
 val CheckOneInput':

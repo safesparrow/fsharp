@@ -1,4 +1,4 @@
-﻿module ParallelTypeCheckingTests.Code.TrieApproach.TrieMapping
+﻿module ParallelTypeCheckingTests.TrieMapping
 
 open System.Collections.Generic
 open FSharp.Compiler.Syntax

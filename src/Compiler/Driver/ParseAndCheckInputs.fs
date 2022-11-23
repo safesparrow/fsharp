@@ -1395,10 +1395,6 @@ let CheckOneInput
                 )
     }
 
-let mutable asts = ConcurrentDictionary<string, ParsedInput>()
-
-let mutable fsiBackedInfos = ConcurrentDictionary<string, ModuleOrNamespaceType>()
-
 /// Typecheck a single file (or interactive entry into F# Interactive)
 let CheckOneInputAux'
     ((checkForErrors,
@@ -1458,10 +1454,6 @@ let CheckOneInputAux'
                     | Some prefixPath ->
                         let m = qualNameOfFile.Range
                         TcOpenModuleOrNamespaceDecl tcSink tcGlobals amap m tcEnv (prefixPath, m)
-
-                // Save info needed for type-checking .fs file later on
-                // printfn $"[{Thread.CurrentThread.ManagedThreadId}] Saving fsiBackedInfos for {file.FileName}"
-                fsiBackedInfos[file.FileName] <- sigFileType
 
                 // printfn $"Finished Processing Sig {file.FileName}"
                 return

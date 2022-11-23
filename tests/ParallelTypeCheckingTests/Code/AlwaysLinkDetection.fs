@@ -1,4 +1,4 @@
-﻿module ParallelTypeCheckingTests.Code.TrieApproach.AlwaysLinkDetection
+﻿module ParallelTypeCheckingTests.AlwaysLinkDetection
 
 open FSharp.Compiler.Syntax
 

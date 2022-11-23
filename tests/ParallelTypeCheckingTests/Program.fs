@@ -26,8 +26,8 @@ open ParallelTypeCheckingTests.TestUtils
 //         Method = mode
 //         WorkingDir = workingDir
 //     }
-open ParallelTypeCheckingTests.Code.TrieApproach
-open ParallelTypeCheckingTests.Code.TrieApproach.DependencyResolution
+open ParallelTypeCheckingTests
+open ParallelTypeCheckingTests.DependencyResolution
 
 [<EntryPoint>]
 let main _argv =

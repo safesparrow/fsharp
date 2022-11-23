@@ -1,4 +1,4 @@
-﻿module rec ParallelTypeCheckingTests.Code.TrieApproach.FileContentMapping
+﻿module rec ParallelTypeCheckingTests.FileContentMapping
 
 open FSharp.Compiler.Syntax
 open FSharp.Compiler.SyntaxTreeOps

@@ -1,8 +1,8 @@
-﻿module ParallelTypeCheckingTests.Code.TrieApproach.SampleData
+﻿module ParallelTypeCheckingTests.SampleData
 
 open System.Collections.Generic
 open NUnit.Framework
-open ParallelTypeCheckingTests.Code.TrieApproach.DependencyResolution
+open DependencyResolution
 
 // This file contains some hard coded data to easily debug the various aspects of the dependency resolution.
 

@@ -1,89 +1,122 @@
-﻿module ParallelTypeCheckingTests.Types
+﻿namespace ParallelTypeCheckingTests
 
-open ParallelTypeCheckingTests.Utils
+open System.Collections.Generic
 open FSharp.Compiler.Syntax
 
-type AST = ParsedInput
+type File = string
+type ModuleSegment = string
 
-type FileType =
-    | Sig
-    | Impl
-
-module AST =
-    let getType (ast: AST) =
-        match ast with
-        | ParsedInput.SigFile _ -> FileType.Sig
-        | ParsedInput.ImplFile _ -> FileType.Impl
-
-/// Input from the compiler after parsing
-[<CustomEquality; NoComparison>]
-type SourceFile =
+type FileWithAST =
     {
-        Idx: FileIdx
-        AST: AST
+        Idx: int
+        File: File
+        AST: ParsedInput
     }
 
-    override this.Equals other =
-        match other with
-        | :? SourceFile as p -> p.Idx.Equals this.Idx
-        | _ -> false
+/// There is a subtle difference a module and namespace.
+/// A namespace does not necessarily expose a set of dependent files.
+/// Only when the namespace exposes types that could later be inferred.
+/// Children of a namespace don't automatically depend on each other for that reason
+type TrieNodeInfo =
+    | Root
+    | Module of segment: string * file: int
+    | Namespace of segment: string * filesThatExposeTypes: HashSet<int>
 
-    override this.GetHashCode() = this.Idx.GetHashCode()
-    override this.ToString() = this.Idx.ToString()
-    member this.QualifiedName = this.AST.QualifiedName.Text
-
-type SourceFiles = SourceFile[]
-
-type ASTOrFsix =
-    // Actual AST of a real file
-    | AST of AST
-    // A dummy file/node we create for performing TcState updates for fsi-backed impl files
-    | Fsix of string
-
-    member x.Name =
+    member x.Files: Set<int> =
         match x with
-        | AST ast -> ast.FileName
-        | Fsix qualifiedName -> qualifiedName + "x"
+        | Root -> failwith "Root has no files"
+        | Module (file = file) -> Set.singleton file
+        | Namespace (filesThatExposeTypes = files) -> set files
 
-    member x.QualifiedName =
-        match x with
-        | AST ast -> ast.QualifiedName.Text
-        | Fsix qualifiedName -> qualifiedName + ".fsix"
-
-/// Basic data about a parsed source file with extra information needed for graph processing
-[<CustomEquality; CustomComparison>]
-type File =
+type TrieNode =
     {
-        /// Order of the file in the project. Files with lower number cannot depend on files with higher number
-        Idx: FileIdx
-        AST: ASTOrFsix
-        FsiBacked: bool
+        Current: TrieNodeInfo
+        Children: Dictionary<ModuleSegment, TrieNode>
     }
 
-    member this.Name = this.AST.Name // TODO Use qualified name
-    // TODO Remove
-    member this.CodeSize = 0
-    member this.QualifiedName = this.AST.QualifiedName
+    member x.Files = x.Current.Files
 
-    override this.Equals other =
-        match other with
-        | :? File as f -> f.Name.Equals this.Name
-        | _ -> false
+type FileContentEntry =
+    /// Any toplevel namespace a file might have.
+    /// In case a file has `module X.Y.Z`, then `X.Y` is considered to be the toplevel namespace
+    | TopLevelNamespace of path: ModuleSegment list * content: FileContentEntry list
+    /// The `open X.Y.Z` syntax.
+    | OpenStatement of path: ModuleSegment list
+    /// Any identifier that has more than one piece (LongIdent or SynLongIdent) in it.
+    /// The last part of the identifier should not be included.
+    | PrefixedIdentifier of path: ModuleSegment list
+    /// Being explicit about nested modules allows for easier reasoning what namespaces (paths) are open.
+    /// We can scope an `OpenStatement` to the everything that is happening inside the nested module.
+    | NestedModule of name: string * nestedContent: FileContentEntry list
 
-    override this.GetHashCode() = this.Name.GetHashCode()
-    override this.ToString() = System.IO.Path.GetFileName this.Name
+type FileContent =
+    {
+        Name: File
+        Idx: int
+        Content: FileContentEntry array
+    }
 
-    interface System.IComparable with
-        member x.CompareTo y =
-            match y with
-            | :? File as f -> x.Idx.Idx.CompareTo f.Idx.Idx
-            | _ -> 0
+type FileContentQueryState =
+    {
+        OwnNamespace: ModuleSegment list option
+        OpenedNamespaces: Set<ModuleSegment list>
+        FoundDependencies: Set<int>
+        CurrentFile: int
+        KnownFiles: Set<int>
+    }
 
-    static member FakeFs (idx: FileIdx) (fsi: string) : File =
+    static member Create (fileIndex: int) (knownFiles: Set<int>) =
         {
-            Idx = idx
-            AST = ASTOrFsix.Fsix fsi
-            FsiBacked = false
+            OwnNamespace = None
+            OpenedNamespaces = Set.empty
+            FoundDependencies = Set.empty
+            CurrentFile = fileIndex
+            KnownFiles = knownFiles
         }
 
-type Files = File[]
+    member x.AddOwnNamespace(ns: ModuleSegment list, ?files: Set<int>) =
+        match files with
+        | None -> { x with OwnNamespace = Some ns }
+        | Some files ->
+            let foundDependencies =
+                Set.filter x.KnownFiles.Contains files |> Set.union x.FoundDependencies
+
+            { x with
+                OwnNamespace = Some ns
+                FoundDependencies = foundDependencies
+            }
+
+    member x.AddDependencies(files: Set<int>) : FileContentQueryState =
+        let files = Set.filter x.KnownFiles.Contains files |> Set.union x.FoundDependencies
+        { x with FoundDependencies = files }
+
+    member x.AddOpenNamespace(path: ModuleSegment list, ?files: Set<int>) =
+        match files with
+        | None ->
+            { x with
+                OpenedNamespaces = Set.add path x.OpenedNamespaces
+            }
+        | Some files ->
+            let foundDependencies =
+                Set.filter x.KnownFiles.Contains files |> Set.union x.FoundDependencies
+
+            { x with
+                FoundDependencies = foundDependencies
+                OpenedNamespaces = Set.add path x.OpenedNamespaces
+            }
+
+    member x.OpenNamespaces =
+        match x.OwnNamespace with
+        | None -> x.OpenedNamespaces
+        | Some ownNs -> Set.add ownNs x.OpenedNamespaces
+
+[<RequireQualifiedAccess>]
+type QueryTrieNodeResult =
+    /// No node was found for the path in the trie
+    | NodeDoesNotExist
+    /// A node was found but it yielded no file links
+    | NodeDoesNotExposeData
+    /// A node was found with one or more file links
+    | NodeExposesData of Set<int>
+
+type QueryTrie = ModuleSegment list -> QueryTrieNodeResult
