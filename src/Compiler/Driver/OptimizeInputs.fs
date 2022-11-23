@@ -230,7 +230,7 @@ let go (env0: IncrementalOptimizationEnv) ((phase1, phase2, phase3): FilePhaseFu
             let hidingInfo =
                 res
                 |> getPhase1Res
-                |> fun (a,b,c) -> c.Full
+                |> fun (_a,_b,c) -> c.Full
             let inputs = env, hidingInfo, file
             let phase3Res = phase3 inputs
             res.Phase3 <- Some phase3Res

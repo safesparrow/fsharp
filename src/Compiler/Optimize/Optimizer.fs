@@ -491,7 +491,7 @@ let mapDiff<'a,'b when 'a: comparison> (a: Map<'a,'b>) (b: Map<'a,'b>) : Map<'a,
     a
     // TODO What if a & b contain a key but with different values? Is that possible?
     |> Seq.choose (fun (KeyValue(k, v)) ->
-        match a.TryFind k with
+        match b.TryFind k with
         | Some _ -> None
         | None -> Some (k, v)
     )
