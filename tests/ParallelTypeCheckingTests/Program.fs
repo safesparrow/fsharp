@@ -32,7 +32,7 @@ open ParallelTypeCheckingTests.DependencyResolution
 [<EntryPoint>]
 let main _argv =
     let filesWithAST =
-        fcsFiles
+        ParallelTypeCheckingTests.Tests.DependencyResolutionTests.fcsFiles
         |> Array.Parallel.mapi (fun idx file ->
             {
                 Idx = idx

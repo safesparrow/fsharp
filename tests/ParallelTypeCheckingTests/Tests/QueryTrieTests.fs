@@ -7,7 +7,6 @@ open DependencyResolution
 // This file contains some hard coded data to easily debug the various aspects of the dependency resolution.
 
 // Some helper DSL functions to construct the FileContentEntry items
-// This should again be mapped from the AST
 
 let topLevelNS (topLevelNamespaceString: string) (content: FileContentEntry list) =
     topLevelNamespaceString.Split(".")
@@ -33,6 +32,7 @@ let prefIdent (lid: string) =
     Array.take (parts.Length - 1) parts |> List.ofArray |> PrefixedIdentifier
 
 // Some hardcoded files that reflect the file content of the first files in the Fantomas.Core project.
+// See https://github.com/fsprojects/fantomas/tree/0938a3daabec80a22d2e17f82aba38456bb793df/src/Fantomas.Core
 let files =
     [|
         {
@@ -725,27 +725,6 @@ let fantomasCoreTrie: TrieNode =
                     }
                 |]
     }
-
-[<Test>]
-let ``Full project simulation`` () =
-    let graph =
-        files
-        |> Array.map (fun fileContent ->
-            let knownFiles =
-                files.[0 .. (fileContent.Idx - 1)] |> Array.map (fun f -> f.Idx) |> set
-
-            let queryTrie: QueryTrie = queryTrieMemoized fantomasCoreTrie
-
-            let result =
-                Seq.fold (processStateEntry queryTrie) (FileContentQueryState.Create fileContent.Idx knownFiles) fileContent.Content
-
-            fileContent.Name, Set.toArray result.FoundDependencies)
-
-    for fileName, deps in graph do
-        let depString =
-            deps |> Array.map (fun depIdx -> files.[depIdx].Name) |> String.concat ", "
-
-        printfn $"%s{fileName}: [{depString}]"
 
 [<Test>]
 let ``Query non existing node in trie`` () =

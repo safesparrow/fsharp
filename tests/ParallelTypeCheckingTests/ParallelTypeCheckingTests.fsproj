@@ -38,19 +38,21 @@
     <Compile Include="Code\Parallel.fs" />
     <Compile Include="Code\GraphProcessing.fs" />
     <Compile Include="Code\ParallelTypeChecking.fs" />
-    <Compile Include="Code\TrieApproach\Types.fs" />
-    <Compile Include="Code\TrieApproach\Continuation.fs" />
-    <Compile Include="Code\TrieApproach\SampleData.fs" />
     <Compile Include="Tests\Utils.fs" />
     <Compile Include="Tests\AssemblySetUp.fs" />
     <Compile Include="Tests\TestCompilation.fs" />
     <Compile Include="Tests\TestCompilationFromCmdlineArgs.fs" />
-    <Compile Include="Tests\TestGraph.fs" />
     <Content Include="Tests\FCS.args.txt" />
     <Content Include="Tests\FCS.prepare.ps1" />
     <Content Include="Tests\ComponentTests.args.txt" />
     <Content Include="Tests\.gitignore" />
     <Compile Include="Tests\TypedTreeGraph.fs" />
+    <Compile Include="Tests\QueryTrieTests.fs" />
+    <Compile Include="Tests\AlwaysLinkDetectionTests.fs" />
+    <Compile Include="Tests\TrieMappingTests.fs" />
+    <Compile Include="Tests\FileContentMappingTests.fs" />
+    <Compile Include="Tests\Scenarios.fs" />
+    <Compile Include="Tests\DependencyResolutionTests.fs" />
     <Compile Include="Program.fs" />
   <Content Include="Docs.md" />
   </ItemGroup>

@@ -669,18 +669,3 @@ let mkFileContent (f: FileWithAST) : FileContentEntry list =
 
                 [ yield! attributes; yield! contentEntries ])
             contents
-
-// ================================================================================================================================
-// ================================================================================================================================
-module Tests =
-    open NUnit.Framework
-    open FSharp.Compiler.Service.Tests.Common
-
-    [<Test>]
-    let ``Test a single file`` () =
-        let fileName =
-            @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\Selection.fs"
-
-        let ast = parseSourceCode (fileName, System.IO.File.ReadAllText(fileName))
-        let contents = mkFileContent { Idx = 0; File = fileName; AST = ast }
-        ignore contents

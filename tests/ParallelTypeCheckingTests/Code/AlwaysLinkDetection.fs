@@ -45,18 +45,3 @@ let doesFileHasAutoOpenBehavior (ast: ParsedInput) : bool =
                 isAnyAttributeAutoOpen attribs
                 || kind = SynModuleOrNamespaceKind.GlobalNamespace)
             contents
-
-// ==============================================================================================================================
-// ==============================================================================================================================
-
-open System.IO
-open NUnit.Framework
-open FSharp.Compiler.Service.Tests.Common
-
-[<Test>]
-let ``detect auto open`` () =
-    let file =
-        Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "..", "src", "Compiler", "Utilities", "ImmutableArray.fsi")
-
-    let ast = parseSourceCode (file, File.ReadAllText(file))
-    Assert.True(doesFileHasAutoOpenBehavior ast)
