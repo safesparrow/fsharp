@@ -216,9 +216,9 @@ let mkGraph (files: FileWithAST array) : Graph<int> =
 
     let filesWithAutoOpen =
         Array.choose
-            (fun (f, _) ->
+            (fun (f, idx) ->
                 if AlwaysLinkDetection.doesFileHasAutoOpenBehavior f.AST then
-                    Some f.Idx
+                    Some idx
                 else
                     None)
             trieInput
