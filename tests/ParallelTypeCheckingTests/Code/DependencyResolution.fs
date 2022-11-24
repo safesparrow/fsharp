@@ -188,7 +188,7 @@ let mkGraph (files: FileWithAST array) : Graph<int> =
                     let implIdx =
                         files
                         |> Array.skip (f.Idx + 1)
-                        |> Array.tryFind (fun (implFile: FileWithAST) -> $"{implFile.AST.FileName}i" = f.File)
+                        |> Array.tryFind (fun (implFile: FileWithAST) -> $"{implFile.File}i" = f.File)
 
                     Option.map (fun (implFile: FileWithAST) -> (implFile.Idx, f.Idx), (f.Idx, implFile.Idx)) implIdx
                 | ParsedInput.ImplFile _ -> None)

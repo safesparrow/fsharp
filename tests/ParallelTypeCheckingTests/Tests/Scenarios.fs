@@ -203,7 +203,7 @@ type Y = { Q: int }
         scenario
             "Signature files are being used to construct the Trie"
             [
-                sourceFile
+                sourceFile // 0
                     "A.fsi"
                     """
 module A
@@ -211,7 +211,7 @@ module A
 val a: int -> int
 """
                     Set.empty
-                sourceFile
+                sourceFile // 1
                     "A.fs"
                     """
 module A
@@ -221,15 +221,15 @@ module Helpers =
 
 let a b = Helpers.impl b
 """
-                    Set.empty
-                sourceFile
+                    (set [| 0 |])
+                sourceFile // 2
                     "B.fs"
                     """
 module B
 
 let b = A.a 42
 """
-                    (set [| 0 |])
+                    (set [| 1 |])
             ]
         scenario
             "A partial open statement still links to a file as a last resort"
@@ -358,5 +358,87 @@ module B
 let person: string = A.B.C.D.Name
 """
                     (set [| 0 |])
+            ]
+        // Diamond scenario
+        scenario
+            "Dependent signature files"
+            [
+                sourceFile // 0
+                    "A.fsi"
+                    """
+module A
+
+type AType = class end
+"""
+                    Set.empty
+                sourceFile // 1
+                    "A.fs"
+                    """
+module A
+
+type AType = class end
+            """
+                    (set [| 0 |])
+                sourceFile // 2
+                    "B.fsi"
+                    """
+module B
+
+open A
+
+val b: AType -> unit
+"""
+                    (set [| 1 |])
+                sourceFile // 3
+                    "B.fs"
+                    """
+module B
+
+open A
+
+let b (a:AType) = ()
+"""
+                    (set [| 1; 2 |])
+                sourceFile // 4
+                    "C.fsi"
+                    """
+                module C
+
+                type CType = class end
+                            """
+                    Set.empty
+                sourceFile // 5
+                    "C.fs"
+                    """
+module C
+
+type CType = class end
+                            """
+                    (set [| 4 |])
+                sourceFile // 6
+                    "D.fsi"
+                    """
+module D
+
+open A
+open C
+
+val d: CType -> unit
+            """
+                    (set [| 1; 5 |])
+                sourceFile // 7
+                    "D.fs"
+                    """
+module D
+
+open A
+open B
+open C
+
+let d (c: CType) =
+    let a : AType = failwith "todo"
+    b a
+            """
+                    (set [| 1; 3; 5; 6 |])
             ]
     ]
