@@ -46,7 +46,7 @@ let mergeTrieNodes (defaultChildSize: int) (tries: TrieNode array) =
 let hs f = HashSet(Seq.singleton f)
 let emptyHS () = HashSet(0)
 
-let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
+let rec mkTrieNodeFor (file: FileWithAST, idx: int) : TrieNode =
     match file.AST with
     | ParsedInput.SigFile (ParsedSigFileInput (contents = contents)) ->
         contents
@@ -82,14 +82,14 @@ let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
                                     TrieNodeInfo.Namespace(
                                         name,
                                         (if hasTypesOrAutoOpenNestedModules then
-                                             hs file.Idx
+                                             hs idx
                                          else
                                              emptyHS ())
                                     )
                                 else
-                                    TrieNodeInfo.Module(name, file.Idx)
+                                    TrieNodeInfo.Module(name, idx)
 
-                            let children = List.choose (mkTrieForNestedSigModule file.Idx) decls
+                            let children = List.choose (mkTrieForNestedSigModule idx) decls
 
                             continuation (
                                 Dictionary<_, _>(
@@ -154,14 +154,14 @@ let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
                                     TrieNodeInfo.Namespace(
                                         name,
                                         (if hasTypesOrAutoOpenNestedModules then
-                                             hs file.Idx
+                                             hs idx
                                          else
                                              emptyHS ())
                                     )
                                 else
-                                    TrieNodeInfo.Module(name, file.Idx)
+                                    TrieNodeInfo.Module(name, idx)
 
-                            let children = List.choose (mkTrieForSynModuleDecl file.Idx) decls
+                            let children = List.choose (mkTrieForSynModuleDecl idx) decls
 
                             continuation (
                                 Dictionary<_, _>(
@@ -228,7 +228,7 @@ and mkTrieForNestedSigModule (fileIndex: int) (decl: SynModuleSigDecl) : KeyValu
 
     | _ -> None
 
-let mkTrie (files: FileWithAST array) : TrieNode =
+let mkTrie (files: (FileWithAST * int) array) : TrieNode =
     mergeTrieNodes 0 (Array.Parallel.map mkTrieNodeFor files)
 
 // ==================================================================================================================================================
@@ -266,7 +266,7 @@ let ``Fantomas Core trie`` () =
         |]
         |> Array.mapi (fun idx file ->
             let ast = parseSourceCode (file, System.IO.File.ReadAllText(file))
-            { Idx = idx; File = file; AST = ast })
+            { Idx = idx; File = file; AST = ast }, idx)
 
     let trie = mkTrie files
     ignore trie

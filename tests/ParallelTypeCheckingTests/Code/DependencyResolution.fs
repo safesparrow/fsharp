@@ -179,13 +179,34 @@ let collectGhostDependencies (fileIndex: int) (trie: TrieNode) (queryTrie: Query
                 Array.empty)
 
 let mkGraph (files: FileWithAST array) : Graph<int> =
-    // Implementation files backed by signatures should be excluded to construct the trie.
-    let trieInput =
-        Array.filter
+    // File pairs to easily retrieve the signature file from a
+    let implToSig, sigToImpl =
+        Array.choose
             (fun f ->
                 match f.AST with
-                | ParsedInput.SigFile _ -> true
-                | ParsedInput.ImplFile _ -> Array.forall (fun (sigFile: FileWithAST) -> sigFile.File <> $"{f.File}i") files)
+                | ParsedInput.SigFile _ ->
+                    let implIdx =
+                        files
+                        |> Array.skip (f.Idx + 1)
+                        |> Array.tryFind (fun (implFile: FileWithAST) -> $"{implFile.AST.FileName}i" = f.File)
+
+                    Option.map (fun (implFile: FileWithAST) -> (implFile.Idx, f.Idx), (f.Idx, implFile.Idx)) implIdx
+                | ParsedInput.ImplFile _ -> None)
+            files
+        |> Array.unzip
+        |> fun (implToSig, sigToImpl) -> Map.ofArray implToSig, Map.ofArray sigToImpl
+
+    // Implementation files backed by signatures should be excluded to construct the trie.
+    // Signature files should link to the implementation index instead.
+    let trieInput =
+        Array.choose
+            (fun f ->
+                match f.AST with
+                | ParsedInput.SigFile _ -> Map.tryFind f.Idx sigToImpl |> Option.map (fun implIdx -> (f, implIdx))
+                | ParsedInput.ImplFile _ ->
+                    match Map.tryFind f.Idx implToSig with
+                    | Some _ -> None
+                    | None -> Some(f, f.Idx))
             files
 
     let trie = TrieMapping.mkTrie trieInput
@@ -195,7 +216,7 @@ let mkGraph (files: FileWithAST array) : Graph<int> =
 
     let filesWithAutoOpen =
         Array.choose
-            (fun f ->
+            (fun (f, _) ->
                 if AlwaysLinkDetection.doesFileHasAutoOpenBehavior f.AST then
                     Some f.Idx
                 else
@@ -221,11 +242,18 @@ let mkGraph (files: FileWithAST array) : Graph<int> =
             else
                 [| 0 .. (file.Idx - 1) |].Intersect(filesWithAutoOpen).ToArray()
 
+        // Automatically add a link from an implementation to its signature file (if present)
+        let signatureDependency =
+            match Map.tryFind file.Idx implToSig with
+            | None -> Array.empty
+            | Some sigIdx -> Array.singleton sigIdx
+
         let allDependencies =
             [|
                 yield! result.FoundDependencies
                 yield! ghostDependencies
                 yield! topLevelAutoOpenFiles
+                yield! signatureDependency
             |]
             |> Array.distinct
 
