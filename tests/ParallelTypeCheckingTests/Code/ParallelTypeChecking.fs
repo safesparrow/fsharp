@@ -31,12 +31,12 @@ let DiagnosticsLoggerForInput (tcConfig: TcConfig, input: ParsedInput, oldLogger
 
 type State = TcState * bool
 type FinalFileResult = TcEnv * TopAttribs * CheckedImplFile option * ModuleOrNamespaceType
-type SingleResult = State -> FinalFileResult * State
+type SingleResult = State -> PartialTypeCheckResult * State
 type Item = File
 
 type PartialResult = TcEnv * TopAttribs * CheckedImplFile option * ModuleOrNamespaceType
 
-let folder (state: State) (result: SingleResult) : FinalFileResult * State = result state
+let folder (state: State) (result: SingleResult) : PartialTypeCheckResult * State = result state
 
 /// Use parallel checking of implementation files that have signature files
 let CheckMultipleInputsInParallel
@@ -54,7 +54,7 @@ let CheckMultipleInputsInParallel
             })
 
     let graph = DependencyResolution.mkGraph sourceFiles
-    graph |> Graph.map (fun idx -> sourceFiles.[idx].File) |> Graph.print
+    // graph |> Graph.map (fun idx -> sourceFiles.[idx].File) |> Graph.print
 
     let graphDumpPath =
         let graphDumpName =
@@ -80,7 +80,7 @@ let CheckMultipleInputsInParallel
     let processFile
         ((input, logger): ParsedInput * DiagnosticsLogger)
         ((currentTcState, _currentPriorErrors): State)
-        : State -> PartialResult * State =
+        : State -> PartialTypeCheckResult * State =
         cancellable {
             use _ = UseDiagnosticsLogger logger
             // printfn $"Processing AST {file.ToString()}"
@@ -111,7 +111,7 @@ let CheckMultipleInputsInParallel
                 (fun (state: State) ->
                     // printfn $"Applying {file.ToString()}"
                     let tcState, priorErrors = state
-                    let (partialResult: PartialResult, tcState) = f tcState
+                    let (partialResult: PartialTypeCheckResult, tcState) = f tcState
 
                     let hasErrors = logger.ErrorCount > 0
                     // TODO Should we use local _priorErrors or global priorErrors?
@@ -131,16 +131,16 @@ let CheckMultipleInputsInParallel
                 let logger = DiagnosticsLoggerForInput(tcConfig, input, oldLogger)
                 input, logger)
 
-        let processFile (fileIdx: int) (state: State) : State -> PartialResult * State =
+        let processFile (fileIdx: int) (state: State) : State -> PartialTypeCheckResult * State =
             let parsedInput, logger = inputsWithLoggers.[fileIdx]
             processFile (parsedInput, logger) state
 
-        let folder: State -> SingleResult -> FinalFileResult * State = folder
+        let folder: State -> SingleResult -> PartialTypeCheckResult * State = folder
         let _qnof = QualifiedNameOfFile.QualifiedNameOfFile(Ident("", Range.Zero))
         let state: State = tcState, priorErrors
 
         let partialResults, (tcState, _) =
-            GraphProcessing.processGraph<int, State, SingleResult, FinalFileResult>
+            GraphProcessing.processGraph<int, State, SingleResult, PartialTypeCheckResult>
                 graph
                 processFile
                 folder
@@ -150,4 +150,25 @@ let CheckMultipleInputsInParallel
                 (fun _ -> true)
                 10
 
-        partialResults |> Array.toList, tcState)
+        // Do the parallel phase, checking all implementation files that did have a signature, in parallel.
+        let results, createsGeneratedProvidedTypesFlags =
+            Array.zip partialResults inputsWithLoggers
+            |> ArrayParallel.map (fun (partialResult, (_, logger)) ->
+                use _ = UseDiagnosticsLogger logger
+                use _ = UseBuildPhase BuildPhase.TypeCheck
+
+                RequireCompilationThread ctok
+
+                match partialResult with
+                | Choice1Of2 result -> result, false
+                | Choice2Of2 backedImplResult -> checkBackedImplementationFile tcGlobals tcConfig logger backedImplResult)
+            |> Array.toList
+            |> List.unzip
+
+        let tcState =
+            updateCreatesGeneratedProvidedTypes
+                tcState
+                (tcState.CreatesGeneratedProvidedTypes
+                 || (createsGeneratedProvidedTypesFlags |> List.exists id))
+
+        results, tcState)
