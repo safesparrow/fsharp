@@ -88,10 +88,10 @@ let CheckMultipleInputsInParallel
             let checkForErrors2 () = priorErrors || (logger.ErrorCount > 0)
 
             let tcSink = TcResultsSink.NoSink
-            let c = cnt
+            // let c = cnt
             cnt <- cnt + 1
 
-            printfn $"#{c} [thread {Thread.CurrentThread.ManagedThreadId}] Type-checking {input.FileName}"
+            // printfn $"#{c} [thread {Thread.CurrentThread.ManagedThreadId}] Type-checking {input.FileName}"
 
             let! f =
                 CheckOneInput'(
