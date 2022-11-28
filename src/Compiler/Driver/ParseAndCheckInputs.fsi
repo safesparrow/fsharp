@@ -152,16 +152,6 @@ val AddCheckResultsToTcState:
 
 type PartialResult = TcEnv * TopAttribs * CheckedImplFile option * ModuleOrNamespaceType
 
-type PairResultOfImplementInPair =
-    Import.ImportMap * string list option * ModuleOrNamespaceType * bool * ParsedImplFileInput * TcState * ModuleOrNamespaceType
-
-type PartialTypeCheckResult = Choice<PartialResult, PairResultOfImplementInPair>
-
-val checkBackedImplementationFile:
-    TcGlobals -> TcConfig -> DiagnosticsLogger -> PairResultOfImplementInPair -> PartialResult * bool
-
-val updateCreatesGeneratedProvidedTypes: TcState -> bool -> TcState
-
 type CheckArgs =
     CompilationThreadToken * (unit -> bool) * TcConfig * TcImports * TcGlobals * LongIdent option * TcState * (PhasedDiagnostic -> PhasedDiagnostic) * ParsedInput list
 
@@ -195,7 +185,7 @@ val CheckOneInput':
     tcState: TcState *
     input: ParsedInput *
     skipImplIfSigExists: bool ->
-        Cancellable<TcState -> PartialTypeCheckResult * TcState>
+        Cancellable<TcState -> PartialResult * TcState>
 
 val CheckMultipleInputsInParallel:
     (CompilationThreadToken * (unit -> bool) * TcConfig * TcImports * TcGlobals * LongIdent option * TcState * (PhasedDiagnostic -> PhasedDiagnostic) * ParsedInput list) ->
