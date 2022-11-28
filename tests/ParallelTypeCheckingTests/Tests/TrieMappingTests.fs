@@ -35,8 +35,7 @@ let ``Basic trie`` () =
                 Idx = idx
                 File = fileName
                 AST = parseSourceCode (fileName, code)
-            },
-            idx)
+            })
 
     let trie = TrieMapping.mkTrie files
 

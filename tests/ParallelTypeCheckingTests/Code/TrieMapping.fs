@@ -46,7 +46,9 @@ let mergeTrieNodes (defaultChildSize: int) (tries: TrieNode array) =
 let hs f = HashSet(Seq.singleton f)
 let emptyHS () = HashSet(0)
 
-let rec mkTrieNodeFor (file: FileWithAST, idx: int) : TrieNode =
+let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
+    let idx = file.Idx
+
     match file.AST with
     | ParsedInput.SigFile (ParsedSigFileInput (contents = contents)) ->
         contents
@@ -228,7 +230,7 @@ and mkTrieForNestedSigModule (fileIndex: int) (decl: SynModuleSigDecl) : KeyValu
 
     | _ -> None
 
-let mkTrie (files: (FileWithAST * int) array) : TrieNode =
+let mkTrie (files: FileWithAST array) : TrieNode =
     mergeTrieNodes 0 (Array.Parallel.map mkTrieNodeFor files)
 
 // ==================================================================================================================================================
@@ -266,7 +268,7 @@ let ``Fantomas Core trie`` () =
         |]
         |> Array.mapi (fun idx file ->
             let ast = parseSourceCode (file, System.IO.File.ReadAllText(file))
-            { Idx = idx; File = file; AST = ast }, idx)
+            { Idx = idx; File = file; AST = ast })
 
     let trie = mkTrie files
     ignore trie
