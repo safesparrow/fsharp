@@ -106,3 +106,18 @@ module Z =
     match content with
     | [ TopLevelNamespace "X" [ NestedModule "Z" [] ] ] -> Assert.Pass()
     | content -> Assert.Fail($"Unexpected content: {content}")
+
+[<Test>]
+let ``Single ident module abbreviation`` () =
+    let content =
+        getContent
+            true
+            """
+module A
+
+module B = C
+"""
+
+    match content with
+    | [ TopLevelNamespace "" [ PrefixedIdentifier "C" ] ] -> Assert.Pass()
+    | content -> Assert.Fail($"Unexpected content: {content}")

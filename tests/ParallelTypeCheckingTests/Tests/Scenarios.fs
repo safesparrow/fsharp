@@ -465,6 +465,8 @@ exception BakedInMemberConstraintName of string
                     """
 namespace FSharp.Compiler.CodeAnalysis
 
+open FSharp.Compiler
+
 module Tc = CheckExpressions
 """
                     (set [| 0 |])

@@ -28,6 +28,11 @@ let visitLongIdent (lid: LongIdent) =
     | [ _ ] -> []
     | lid -> [ FileContentEntry.PrefixedIdentifier(longIdentToPath true lid) ]
 
+let visitLongIdentForModuleAbbrev (lid: LongIdent) =
+    match lid with
+    | [] -> []
+    | lid -> [ FileContentEntry.PrefixedIdentifier(longIdentToPath false lid) ]
+
 let visitSynAttribute (a: SynAttribute) : FileContentEntry list =
     [ yield! visitSynLongIdent a.TypeName; yield! visitSynExpr a.ArgExpr ]
 
@@ -55,7 +60,7 @@ let visitSynModuleDecl (decl: SynModuleDecl) : FileContentEntry list =
     | SynModuleDecl.ModuleAbbrev (longId = longId) ->
         // I believe this is enough
         // A module abbreviation doesn't appear to be exposed as part of the current module/namespace
-        visitLongIdent longId
+        visitLongIdentForModuleAbbrev longId
     | SynModuleDecl.NamespaceFragment _ -> []
     | SynModuleDecl.Exception(exnDefn = SynExceptionDefn (exnRepr = SynExceptionDefnRepr (attributes = attributes
                                                                                           caseName = caseName
@@ -79,7 +84,7 @@ let visitSynModuleSigDecl (md: SynModuleSigDecl) =
             yield FileContentEntry.NestedModule(ident.idText, lc visitSynModuleSigDecl decls)
         ]
     | SynModuleSigDecl.NestedModule _ -> failwith "A nested module cannot have multiple identifiers"
-    | SynModuleSigDecl.ModuleAbbrev _ -> failwith "no support for module abbreviations"
+    | SynModuleSigDecl.ModuleAbbrev (longId = longId) -> visitLongIdentForModuleAbbrev longId
     | SynModuleSigDecl.Val (valSig, _) -> visitSynValSig valSig
     | SynModuleSigDecl.Types (types = types) -> lc visitSynTypeDefnSig types
     | SynModuleSigDecl.Exception(exnSig = SynExceptionSig (exnRepr = SynExceptionDefnRepr (attributes = attributes
