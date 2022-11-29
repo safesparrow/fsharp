@@ -26,19 +26,6 @@ open ParallelTypeCheckingTests.TestUtils
 //         Method = mode
 //         WorkingDir = workingDir
 //     }
-open ParallelTypeCheckingTests
-open ParallelTypeCheckingTests.DependencyResolution
 
 [<EntryPoint>]
-let main _argv =
-    let filesWithAST =
-        ParallelTypeCheckingTests.Tests.DependencyResolutionTests.fcsFiles
-        |> Array.Parallel.mapi (fun idx file ->
-            {
-                Idx = idx
-                AST = FSharp.Compiler.Service.Tests.Common.parseSourceCode (file, System.IO.File.ReadAllText(file))
-                File = file
-            })
-
-    let _graph = mkGraph filesWithAST
-    0
+let main _argv = 0

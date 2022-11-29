@@ -29,15 +29,6 @@ let codebases =
             WorkDir = $@"{__SOURCE_DIRECTORY__}\.fcs_test\tests\FSharp.Compiler.ComponentTests"
             Path = $@"{__SOURCE_DIRECTORY__}\ComponentTests.args.txt"
         }
-        // Hard coded example ;)
-        {
-            WorkDir = @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core"
-            Path = @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\args.txt"
-        }
-        {
-            WorkDir = @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core.Tests"
-            Path = @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core.Tests\args.txt"
-        }
     |]
 
 let checker = FSharpChecker.Create(keepAssemblyContents = true)

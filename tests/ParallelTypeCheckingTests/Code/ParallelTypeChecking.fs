@@ -54,19 +54,19 @@ let CheckMultipleInputsInParallel
             })
 
     let graph = DependencyResolution.mkGraph sourceFiles
-    graph |> Graph.map (fun idx -> sourceFiles.[idx].File) |> Graph.print
+    // graph |> Graph.map (fun idx -> sourceFiles.[idx].File) |> Graph.print
 
-    let graphDumpPath =
-        let graphDumpName =
-            tcConfig.outputFile
-            |> Option.map Path.GetFileName
-            |> Option.defaultValue "project"
-
-        $"{graphDumpName}.deps.json"
-
-    graph
-    |> Graph.map (fun idx -> sourceFiles.[idx].File)
-    |> Graph.serialiseToJson graphDumpPath
+    // let graphDumpPath =
+    //     let graphDumpName =
+    //         tcConfig.outputFile
+    //         |> Option.map Path.GetFileName
+    //         |> Option.defaultValue "project"
+    //
+    //     $"{graphDumpName}.deps.json"
+    //
+    // graph
+    // |> Graph.map (fun idx -> sourceFiles.[idx].File)
+    // |> Graph.serialiseToJson graphDumpPath
 
     let _ = ctok // TODO Use
     let diagnosticsLogger = DiagnosticsThreadStatics.DiagnosticsLogger
@@ -109,8 +109,6 @@ let CheckMultipleInputsInParallel
             // printfn $"Finished Processing AST {file.ToString()}"
             return
                 (fun (isFinalFold: bool) (state: State) ->
-                    if isFinalFold then
-                        printfn "final fold for %s" input.FileName
 
                     // printfn $"Applying {file.ToString()}"
                     let tcState, priorErrors = state
