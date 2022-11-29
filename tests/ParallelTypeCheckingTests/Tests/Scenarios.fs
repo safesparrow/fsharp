@@ -229,7 +229,7 @@ module B
 
 let b = A.a 42
 """
-                    (set [| 1 |])
+                    (set [| 0 |])
             ]
         scenario
             "A partial open statement still links to a file as a last resort"
@@ -388,7 +388,7 @@ open A
 
 val b: AType -> unit
 """
-                    (set [| 1 |])
+                    (set [| 0 |])
                 sourceFile // 3
                     "B.fs"
                     """
@@ -398,7 +398,7 @@ open A
 
 let b (a:AType) = ()
 """
-                    (set [| 1; 2 |])
+                    (set [| 0; 2 |])
                 sourceFile // 4
                     "C.fsi"
                     """
@@ -425,7 +425,7 @@ open C
 
 val d: CType -> unit
             """
-                    (set [| 1; 5 |])
+                    (set [| 0; 4 |])
                 sourceFile // 7
                     "D.fs"
                     """
@@ -439,6 +439,34 @@ let d (c: CType) =
     let a : AType = failwith "todo"
     b a
             """
-                    (set [| 1; 3; 5; 6 |])
+                    (set [| 0; 2; 4; 6 |])
+            ]
+        scenario
+            "Module abbreviations with shared namespace"
+            [
+                sourceFile
+                    "A.fsi"
+                    """
+module internal FSharp.Compiler.CheckExpressions
+
+exception BakedInMemberConstraintName of string
+"""
+                    Set.empty
+                sourceFile
+                    "A.fs"
+                    """
+module internal FSharp.Compiler.CheckExpressions
+
+exception BakedInMemberConstraintName of string
+"""
+                    (set [| 0 |])
+                sourceFile
+                    "B.fs"
+                    """
+namespace FSharp.Compiler.CodeAnalysis
+
+module Tc = CheckExpressions
+"""
+                    (set [| 0 |])
             ]
     ]
