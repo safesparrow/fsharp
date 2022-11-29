@@ -31,12 +31,12 @@ let DiagnosticsLoggerForInput (tcConfig: TcConfig, input: ParsedInput, oldLogger
 
 type State = TcState * bool
 type FinalFileResult = TcEnv * TopAttribs * CheckedImplFile option * ModuleOrNamespaceType
-type SingleResult = State -> FinalFileResult * State
+type SingleResult = bool -> State -> FinalFileResult * State
 type Item = File
 
 type PartialResult = TcEnv * TopAttribs * CheckedImplFile option * ModuleOrNamespaceType
 
-let folder (state: State) (result: SingleResult) : FinalFileResult * State = result state
+let folder (isFinalFold: bool) (state: State) (result: SingleResult) : FinalFileResult * State = result isFinalFold state
 
 /// Use parallel checking of implementation files that have signature files
 let CheckMultipleInputsInParallel
@@ -80,7 +80,7 @@ let CheckMultipleInputsInParallel
     let processFile
         ((input, logger): ParsedInput * DiagnosticsLogger)
         ((currentTcState, _currentPriorErrors): State)
-        : State -> PartialResult * State =
+        : bool -> State -> PartialResult * State =
         cancellable {
             use _ = UseDiagnosticsLogger logger
             // printfn $"Processing AST {file.ToString()}"
@@ -108,10 +108,13 @@ let CheckMultipleInputsInParallel
 
             // printfn $"Finished Processing AST {file.ToString()}"
             return
-                (fun (state: State) ->
+                (fun (isFinalFold: bool) (state: State) ->
+                    if isFinalFold then
+                        printfn "final fold for %s" input.FileName
+
                     // printfn $"Applying {file.ToString()}"
                     let tcState, priorErrors = state
-                    let (partialResult: PartialResult, tcState) = f tcState
+                    let (partialResult: PartialResult, tcState) = f isFinalFold tcState
 
                     let hasErrors = logger.ErrorCount > 0
                     // TODO Should we use local _priorErrors or global priorErrors?
@@ -131,11 +134,11 @@ let CheckMultipleInputsInParallel
                 let logger = DiagnosticsLoggerForInput(tcConfig, input, oldLogger)
                 input, logger)
 
-        let processFile (fileIdx: int) (state: State) : State -> PartialResult * State =
+        let processFile (fileIdx: int) (state: State) : bool -> State -> PartialResult * State =
             let parsedInput, logger = inputsWithLoggers.[fileIdx]
             processFile (parsedInput, logger) state
 
-        let folder: State -> SingleResult -> FinalFileResult * State = folder
+        let folder: bool -> State -> SingleResult -> FinalFileResult * State = folder
         let _qnof = QualifiedNameOfFile.QualifiedNameOfFile(Ident("", Range.Zero))
         let state: State = tcState, priorErrors
 

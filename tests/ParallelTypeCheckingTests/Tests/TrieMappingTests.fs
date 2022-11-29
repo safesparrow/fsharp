@@ -40,7 +40,7 @@ let ``Basic trie`` () =
     let trie = TrieMapping.mkTrie files
 
     match trie.Current with
-    | TrieNodeInfo.Root _ -> ()
+    | TrieNodeInfo.Root -> ()
     | current -> Assert.Fail($"mkTrie should always return a TrieNodeInfo.Root, got {current}")
 
     let xNode = trie.Children.["X"]

@@ -185,7 +185,7 @@ val CheckOneInput':
     tcState: TcState *
     input: ParsedInput *
     skipImplIfSigExists: bool ->
-        Cancellable<TcState -> PartialResult * TcState>
+        Cancellable<bool -> TcState -> PartialResult * TcState>
 
 val CheckMultipleInputsInParallel:
     (CompilationThreadToken * (unit -> bool) * TcConfig * TcImports * TcGlobals * LongIdent option * TcState * (PhasedDiagnostic -> PhasedDiagnostic) * ParsedInput list) ->
