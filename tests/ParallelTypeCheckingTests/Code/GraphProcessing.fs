@@ -141,7 +141,7 @@ let combineResults
 let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality and 'Item: comparison>
     (graph: Graph<'Item>)
     (doWork: 'Item -> 'State -> 'Result)
-    (folder: 'State -> 'Result -> 'FinalFileResult * 'State)
+    (folder: bool -> 'State -> 'Result -> 'FinalFileResult * 'State)
     (foldingOrderer: 'Item -> int)
     (emptyState: 'State)
     (includeInFinalState: 'Item -> bool)
@@ -188,8 +188,8 @@ let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality a
             State = emptyState
         }
 
-    let folder { Meta = meta; State = state } { Item = item; Result = result } =
-        let finalFileResult, state = folder state result
+    let folder (isFinalFold: bool) { Meta = meta; State = state } { Item = item; Result = result } =
+        let finalFileResult, state = folder isFinalFold state result
 
         let state =
             {
@@ -208,7 +208,7 @@ let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality a
     let work
         (node: Node<'Item, StateWrapper<'Item, 'State>, ResultWrapper<'Item, 'Result>>)
         : Node<'Item, StateWrapper<'Item, 'State>, ResultWrapper<'Item, 'Result>>[] =
-        let folder x y = folder x y |> snd
+        let folder x y = folder false x y |> snd
         let deps = lookupMany node.Info.Deps
         let transitiveDeps = lookupMany node.Info.TransitiveDeps
         let inputState = combineResults emptyState deps transitiveDeps folder foldingOrderer
@@ -269,7 +269,7 @@ let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality a
             nodes
         |> Array.fold
             (fun (fileResults, state) node ->
-                let fileResult, state = folder state (node.Result.Value |> snd)
+                let fileResult, state = folder true state (node.Result.Value |> snd)
                 Array.append fileResults [| fileResult |], state)
             ([||], emptyState)
 

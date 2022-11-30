@@ -4,6 +4,7 @@ open FSharp.Test
 open FSharp.Test.Compiler
 open NUnit.Framework
 open ParallelTypeCheckingTests.TestUtils
+open ParallelTypeCheckingTests.Tests.Scenarios
 
 type FProject =
     {
@@ -252,6 +253,37 @@ let ``Compile a valid project using graph-based type-checking`` (project: FProje
 /// Useful as a sanity check </summary>
 [<TestCaseSource(nameof codebases)>]
 let ``Compile a valid project using sequential type-checking`` (project: FProject) =
+    compileAValidProject
+        {
+            Method = Method.Sequential
+            Project = project
+        }
+
+//...
+let scenarios = ParallelTypeCheckingTests.Tests.Scenarios.codebases
+
+[<TestCaseSource(nameof scenarios)>]
+let ``Compile a valid scenario using graph-based type-checking`` (scenario: Scenario) =
+    let project =
+        scenario.Files
+        |> Array.map (fun (f: FileInScenario) -> f.FileWithAST.File, f.Content)
+        |> List.ofArray
+        |> FProject.Make CompileOutput.Library
+
+    compileAValidProject
+        {
+            Method = Method.Graph
+            Project = project
+        }
+
+[<TestCaseSource(nameof scenarios)>]
+let ``Compile a valid scenario using sequential type-checking`` (scenario: Scenario) =
+    let project =
+        scenario.Files
+        |> Array.map (fun (f: FileInScenario) -> f.FileWithAST.File, f.Content)
+        |> List.ofArray
+        |> FProject.Make CompileOutput.Library
+
     compileAValidProject
         {
             Method = Method.Sequential

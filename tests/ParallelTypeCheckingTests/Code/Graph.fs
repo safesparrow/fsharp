@@ -3,15 +3,19 @@
 #nowarn "1182"
 #nowarn "40"
 
+open System.Collections.Concurrent
 open System.Collections.Generic
 open System.IO
 open Newtonsoft.Json
-open ParallelTypeCheckingTests.Utils
 
 /// <summary> DAG of files </summary>
 type Graph<'Node> = IReadOnlyDictionary<'Node, 'Node[]>
 
 module Graph =
+    let memoize<'a, 'b when 'a: equality> f : ('a -> 'b) =
+        let y = HashIdentity.Structural<'a>
+        let d = new ConcurrentDictionary<'a, 'b>(y)
+        fun x -> d.GetOrAdd(x, (fun r -> f r))
 
     let make (nodeDeps: ('Node * 'Node[]) seq) = nodeDeps |> readOnlyDict
 

@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net7.0</TargetFrameworks>
+    <TargetFramework>net7.0</TargetFramework>
     <OutputType>Library</OutputType>
     <GenerateProgramFile>false</GenerateProgramFile>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
@@ -10,7 +10,7 @@
     <IsTestProject>true</IsTestProject>
     <ExcludeFromSourceBuild>true</ExcludeFromSourceBuild>
     <Optimize>false</Optimize>
-    <Tailcalls>false</Tailcalls>
+    <Tailcalls>true</Tailcalls>
     <OtherFlags>$(OtherFlags) --warnon:1182</OtherFlags>
     <NoWarn>$(NoWarn);FS0988;FS1182</NoWarn> <!-- "program does nothing" warning -->
     <DefineConstants Condition="'$(Configuration)'=='release'">$(DefineConstants);RELEASE</DefineConstants>
@@ -30,26 +30,29 @@
     </Compile>
     <Compile Include="Code\Utils.fs" />
     <Compile Include="Code\Types.fs" />
-    <Compile Include="Code\ASTVisit.fs" />
-    <Compile Include="Code\FileInfoGathering.fs" />
     <Compile Include="Code\Graph.fs" />
+    <Compile Include="Code\AlwaysLinkDetection.fs" />
+    <Compile Include="Code\TrieMapping.fs" />
+    <Compile Include="Code\FileContentMapping.fs" />
     <Compile Include="Code\DependencyResolution.fs" />
     <Compile Include="Code\Parallel.fs" />
     <Compile Include="Code\GraphProcessing.fs" />
     <Compile Include="Code\ParallelTypeChecking.fs" />
     <Compile Include="Tests\Utils.fs" />
     <Compile Include="Tests\AssemblySetUp.fs" />
-    <Compile Include="Tests\TestASTVisit.fs" />
-    <Compile Include="Tests\TestDependencyResolution.fs" />
-    <Compile Include="Tests\TestGraphProcessing.fs" />
-    <Compile Include="Tests\TestCompilation.fs" />
     <Compile Include="Tests\TestCompilationFromCmdlineArgs.fs" />
-    <Compile Include="Tests\TestGraph.fs" />
     <Content Include="Tests\FCS.args.txt" />
     <Content Include="Tests\FCS.prepare.ps1" />
     <Content Include="Tests\ComponentTests.args.txt" />
     <Content Include="Tests\.gitignore" />
     <Compile Include="Tests\TypedTreeGraph.fs" />
+    <Compile Include="Tests\QueryTrieTests.fs" />
+    <Compile Include="Tests\AlwaysLinkDetectionTests.fs" />
+    <Compile Include="Tests\TrieMappingTests.fs" />
+    <Compile Include="Tests\FileContentMappingTests.fs" />
+    <Compile Include="Tests\Scenarios.fs" />
+    <Compile Include="Tests\DependencyResolutionTests.fs" />
+    <Compile Include="Tests\TestCompilation.fs" />
     <Compile Include="Program.fs" />
   <Content Include="Docs.md" />
   </ItemGroup>

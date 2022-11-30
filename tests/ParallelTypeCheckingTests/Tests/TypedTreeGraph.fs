@@ -1,6 +1,7 @@
 ﻿module ParallelTypeCheckingTests.Tests.TypedTreeGraph
 
 open System
+open System.Collections.Concurrent
 open System.Collections.Generic
 open System.IO
 open FSharp.Compiler.CodeAnalysis
@@ -8,12 +9,15 @@ open FSharp.Compiler.Text
 open FSharp.Compiler.Symbols
 open NUnit.Framework
 open ParallelTypeCheckingTests
-open ParallelTypeCheckingTests.Utils
-open ParallelTypeCheckingTests.Types
-open ParallelTypeCheckingTests.DepResolving
 open ParallelTypeCheckingTests.TestUtils
 
-type Codebase = { WorkDir: string; Path: string }
+type Codebase =
+    {
+        WorkDir: string
+        Path: string
+    }
+
+    override x.ToString() = x.Path
 
 let codebases =
     [|
@@ -25,23 +29,22 @@ let codebases =
             WorkDir = $@"{__SOURCE_DIRECTORY__}\.fcs_test\tests\FSharp.Compiler.ComponentTests"
             Path = $@"{__SOURCE_DIRECTORY__}\ComponentTests.args.txt"
         }
-    // Hard coded example ;)
-    // {
-    //     WorkDir = @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core"
-    //     Path = @"C:\Users\nojaf\Projects\main-fantomas\src\Fantomas.Core\args.txt"
-    // }
     |]
 
 let checker = FSharpChecker.Create(keepAssemblyContents = true)
 
-type DepCollector(projectRoot: string, projectFile: string) =
+type DepCollector(filesThatCameBeforeIt: Set<string>) =
     let deps = HashSet<string>()
 
     member this.Add(declarationLocation: range) : unit =
-        let sourceLocation = declarationLocation.FileName
+        let sourceLocation = Path.GetFullPath declarationLocation.FileName
+        let ext = Path.GetExtension sourceLocation
 
-        if sourceLocation.StartsWith projectRoot && sourceLocation <> projectFile then
-            deps.Add(sourceLocation.Substring(projectRoot.Length + 1)) |> ignore
+        if
+            (ext = ".fs" || ext = ".fsi")
+            && Set.contains sourceLocation filesThatCameBeforeIt
+        then
+            deps.Add(sourceLocation) |> ignore
 
     member this.Deps = Seq.toArray deps
 
@@ -72,13 +75,9 @@ let rec collectFromSymbol (collector: DepCollector) (s: FSharpSymbol) =
     | _ -> ()
 
 // Fair warning: this isn't fast or optimized code
-let graphFromTypedTree
-    (checker: FSharpChecker)
-    (projectDir: string)
-    (projectOptions: FSharpProjectOptions)
-    : Async<Dictionary<string, File> * IReadOnlyDictionary<File, File[]>> =
+let graphFromTypedTree (checker: FSharpChecker) (projectOptions: FSharpProjectOptions) : Async<IDictionary<int, FileWithAST> * Graph<int>> =
     async {
-        let files = Dictionary<string, File>()
+        let files = ConcurrentDictionary<int, FileWithAST>()
 
         let! filesWithDeps =
             projectOptions.SourceFiles
@@ -87,40 +86,34 @@ let graphFromTypedTree
                     let sourceText = (File.ReadAllText >> SourceText.ofString) fileName
                     let! parseResult, checkResult = checker.ParseAndCheckFileInProject(fileName, 1, sourceText, projectOptions)
 
-                    let isFisBacked =
-                        not (fileName.EndsWith(".fsi"))
-                        && (Array.exists (fun (option: string) -> option.Contains($"{fileName}i")) projectOptions.OtherOptions
-                            || Array.exists (fun (file: string) -> file.Contains($"{fileName}i")) projectOptions.SourceFiles)
-
                     match checkResult with
                     | FSharpCheckFileAnswer.Aborted -> return failwith "aborted"
                     | FSharpCheckFileAnswer.Succeeded fileResult ->
                         let allSymbols = fileResult.GetAllUsesOfAllSymbolsInFile() |> Seq.toArray
-                        let collector = DepCollector(projectDir, fileName)
+                        let filesItCanKnow = set projectOptions.SourceFiles.[0 .. (idx - 1)]
+                        let collector = DepCollector(filesItCanKnow)
 
                         for s in allSymbols do
                             collectFromSymbol collector s.Symbol
 
-                        let file: File =
+                        let file: FileWithAST =
                             {
-                                Idx = FileIdx.make idx
-                                AST = ASTOrFsix.AST parseResult.ParseTree
-                                FsiBacked = isFisBacked
+                                Idx = idx
+                                AST = parseResult.ParseTree
+                                File = fileName
                             }
 
-                        files.Add(Path.GetRelativePath(projectDir, fileName), file)
+                        files.TryAdd(idx, file) |> ignore
 
-                        return (file, collector.Deps)
+                        let depIndexes =
+                            collector.Deps
+                            |> Array.map (fun dep -> projectOptions.SourceFiles |> Array.findIndex (fun file -> file = dep))
+
+                        return (idx, depIndexes)
                 })
             |> Async.Parallel
 
-        let graph =
-            filesWithDeps
-            |> Seq.sortBy (fun (file, _) -> file.Idx.Idx)
-            |> Seq.map (fun (file, deps) ->
-                let depsAsFiles = deps |> Array.map (fun dep -> files.[dep])
-                file, depsAsFiles)
-            |> readOnlyDict
+        let graph = readOnlyDict filesWithDeps
 
         return files, graph
     }
@@ -131,7 +124,6 @@ let ``Create Graph from typed tree`` (code: Codebase) =
     let previousDir = Environment.CurrentDirectory
 
     async {
-
         try
             Environment.CurrentDirectory <- code.WorkDir
 
@@ -143,6 +135,8 @@ let ``Create Graph from typed tree`` (code: Codebase) =
                 |> Array.partition (fun option ->
                     not (option.StartsWith("-"))
                     && (option.EndsWith(".fs") || option.EndsWith(".fsi")))
+
+            let sourceFiles = sourceFiles |> Array.map Path.GetFullPath
 
             let otherOptions =
                 otherOptions
@@ -169,50 +163,59 @@ let ``Create Graph from typed tree`` (code: Codebase) =
                     Stamp = None
                 }
 
-            let! files, graphFromTypedTree = graphFromTypedTree checker code.WorkDir proj
-            let path = $"{fileName}.typed-tree.deps.json"
-            graphFromTypedTree |> Graph.map (fun n -> n.Name) |> Graph.serialiseToJson path
+            let! files, graphFromTypedTree = graphFromTypedTree checker proj
 
-            let sourceFiles =
-                files.Values
-                |> Seq.sortBy (fun file -> file.Idx.Idx)
-                |> Seq.map (fun file ->
-                    let ast =
-                        match file.AST with
-                        | ASTOrFsix.AST ast -> ast
-                        | ASTOrFsix.Fsix _ -> failwith "unexpected fsix"
+            graphFromTypedTree
+            |> Graph.map (fun n -> files.[n].File)
+            |> Graph.serialiseToJson $"{fileName}.typed-tree.deps.json"
 
-                    { Idx = file.Idx; AST = ast }: SourceFile)
-                |> Seq.toArray
+            let collectAllDeps (graph: Graph<int>) =
+                (Map.empty, [ 0 .. (sourceFiles.Length - 1) ])
+                ||> List.fold (fun acc idx ->
+                    let deps = graph.[idx]
 
-            let graphFromHeuristic = DependencyResolution.detectFileDependencies sourceFiles
-            let path = $"{fileName}.deps.json"
+                    let allDeps =
+                        set [| yield! deps; yield! (Seq.collect (fun dep -> Map.find dep acc) deps) |]
 
-            graphFromHeuristic.Graph
-            |> Graph.map (fun n -> n.Name)
-            |> Graph.serialiseToJson path
+                    Map.add idx allDeps acc)
 
-            Assert.True(graphFromTypedTree.Count = graphFromHeuristic.Graph.Count, "Both graphs should have the same amount of entries.")
+            let typedTreeMap = collectAllDeps graphFromTypedTree
+            let graphFromHeuristic = files.Values |> Seq.toArray |> DependencyResolution.mkGraph
 
-            let depNames (files: File array) =
-                Array.map (fun (f: File) -> Path.GetFileName(f.Name)) files
-                |> String.concat ", "
+            graphFromHeuristic
+            |> Graph.map (fun n -> files.[n].File)
+            |> Graph.serialiseToJson $"{fileName}.heuristic-tree.deps.json"
 
-            for KeyValue (file, deps) in graphFromHeuristic.Graph do
-                let depsFromTypedTree = graphFromTypedTree.[file]
+            let heuristicMap = collectAllDeps graphFromHeuristic
 
-                if Array.isEmpty depsFromTypedTree && not (Array.isEmpty deps) then
-                    printfn $"{file.Name} has %A{(depNames deps)} while the typed tree had none!"
+            let relativePath file =
+                Path.GetRelativePath(code.WorkDir, file)
+
+            let depNames (deps: Set<int>) =
+                deps |> Seq.map (fun idx -> relativePath files.[idx].File) |> String.concat " "
+
+            /// Compare the found dependencies of a specified heuristic versus the dependencies found in the typed tree
+            let compareDeps source fileName idx (depsFromHeuristic: Set<int>) =
+                let depsFromTypedTree = Map.find idx typedTreeMap
+
+                if Set.isEmpty depsFromTypedTree && not (Set.isEmpty depsFromHeuristic) then
+                    printfn $"{source}:{relativePath fileName} has %A{(depNames depsFromHeuristic)} while the typed tree had none!"
                 else
-                    let isSuperSet =
-                        depsFromTypedTree |> Seq.forall (fun ttDep -> Seq.contains ttDep deps)
+                    let isSuperSet = Set.isSuperset depsFromHeuristic depsFromTypedTree
+                    let delta = Set.difference depsFromTypedTree depsFromHeuristic
 
                     Assert.IsTrue(
                         isSuperSet,
-                        $"""{file.Name} did not contain a superset of the typed tree dependencies:
-Typed tree dependencies: %A{depNames depsFromTypedTree}.
-Heuristic dependencies: %A{depNames deps}."""
+                        $"""{relativePath fileName} did not contain a superset of the typed tree dependencies:
+{source} is missing dependencies: %A{depNames delta}."""
                     )
+
+            [| 0 .. (sourceFiles.Length - 1) |]
+            |> Array.iter (fun (fileIdx: int) ->
+                let file = files.[fileIdx]
+                compareDeps "Trie heuristic" file.File file.Idx (Map.find file.Idx heuristicMap))
+
+            printfn "%A" heuristicMap
         finally
             Environment.CurrentDirectory <- previousDir
     }
