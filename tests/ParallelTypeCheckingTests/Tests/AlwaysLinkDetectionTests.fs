@@ -9,7 +9,7 @@ let ``Detect top level auto open`` () =
     let fileContent =
         """
 [<AutoOpen>]
-module internal Internal.Utilities.Library.Block
+module internal Block
 
 open System.Collections.Immutable
 
@@ -41,3 +41,15 @@ type X = { Y: int }
 
     let ast = parseSourceCode ("Global.fsi", fileContent)
     Assert.True(doesFileHasAutoOpenBehavior ast)
+
+[<Test>]
+let ``Top level auto open module with prefixed namespace should not be consider as always linked`` () =
+    let fileContent =
+        """
+[<AutoOpen>]
+module A.B
+let a = 0
+"""
+
+    let ast = parseSourceCode ("Global.fsi", fileContent)
+    Assert.False(doesFileHasAutoOpenBehavior ast)

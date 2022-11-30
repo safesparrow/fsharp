@@ -35,13 +35,13 @@ let doesFileHasAutoOpenBehavior (ast: ParsedInput) : bool =
     match ast with
     | ParsedInput.SigFile (ParsedSigFileInput (contents = contents)) ->
         List.exists
-            (fun (SynModuleOrNamespaceSig (attribs = attribs; kind = kind)) ->
-                isAnyAttributeAutoOpen attribs
+            (fun (SynModuleOrNamespaceSig (attribs = attribs; longId = longId; kind = kind)) ->
+                (isAnyAttributeAutoOpen attribs && longId.Length < 2)
                 || kind = SynModuleOrNamespaceKind.GlobalNamespace)
             contents
     | ParsedInput.ImplFile (ParsedImplFileInput (contents = contents)) ->
         List.exists
-            (fun (SynModuleOrNamespace (attribs = attribs; kind = kind)) ->
-                isAnyAttributeAutoOpen attribs
+            (fun (SynModuleOrNamespace (attribs = attribs; longId = longId; kind = kind)) ->
+                (isAnyAttributeAutoOpen attribs && longId.Length < 2)
                 || kind = SynModuleOrNamespaceKind.GlobalNamespace)
             contents
