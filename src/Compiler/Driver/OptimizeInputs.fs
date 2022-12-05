@@ -2,7 +2,7 @@
 
 module internal FSharp.Compiler.OptimizeInputs
 
-open System.Collections.Generic
+open System.Collections.Concurrent
 open System.Diagnostics
 open System.IO
 open System.Threading
@@ -54,38 +54,63 @@ let GetInitialOptimizationEnv (tcImports: TcImports, tcGlobals: TcGlobals) =
 [<RequireQualifiedAccess>]
 module private ParallelOptimization =
     open Optimizer
-    type OptimizeDuringCodeGen = bool -> Expr -> Expr
+    
+    /// <summary>
+    /// Each file's optimization can be split into three different phases, executed one after another.
+    /// Each phase calls 'Optimizer.OptimizeImplFile' and performs some other tasks.
+    /// Each phase uses outputs of the previous phase and outputs of previous file's optimization for the same phase.
+    /// </summary>
+    /// <remarks>
+    /// <a href="file:///parallel_optimization.drawio.svg">Diagram</a>
+    /// </remarks>
+    [<RequireQualifiedAccess>]
+    type private OptimizationPhase =
+        | Phase1
+        | Phase2
+        | Phase3
+    
+    module private OptimizationPhase =
+        let prev (phase: OptimizationPhase) =
+            match phase with
+            | OptimizationPhase.Phase1 -> None
+            | OptimizationPhase.Phase2 -> Some OptimizationPhase.Phase1
+            | OptimizationPhase.Phase3 -> Some OptimizationPhase.Phase2
+        let next (phase: OptimizationPhase) =
+            match phase with
+            | OptimizationPhase.Phase1 -> Some OptimizationPhase.Phase2
+            | OptimizationPhase.Phase2 -> Some OptimizationPhase.Phase3
+            | OptimizationPhase.Phase3 -> None
 
-    type OptimizeRes =
+    type private OptimizeDuringCodeGen = bool -> Expr -> Expr
+
+    type private OptimizeImplFileRes =
         (IncrementalOptimizationEnv * CheckedImplFile * ImplFileOptimizationInfo * SignatureHidingInfo) * OptimizeDuringCodeGen
 
-    type PhaseInputs = IncrementalOptimizationEnv * SignatureHidingInfo * CheckedImplFile
-    type Phase1Inputs = PhaseInputs
-    type Phase1Res = OptimizeRes
-    type Phase1Fun = Phase1Inputs -> Phase1Res
-    type Phase2Inputs = IncrementalOptimizationEnv * SignatureHidingInfo * ImplFileOptimizationInfo * CheckedImplFile
-    type Phase2Res = IncrementalOptimizationEnv * CheckedImplFile
-    type Phase2Fun = Phase2Inputs -> Phase2Res
-    type Phase3Inputs = PhaseInputs
-    type Phase3Res = IncrementalOptimizationEnv * CheckedImplFile
-    type Phase3Fun = Phase3Inputs -> Phase3Res
+    // Inputs and outputs of each phase
+    
+    type private PhaseInputs = IncrementalOptimizationEnv * SignatureHidingInfo * CheckedImplFile
+    type private Phase1Inputs = PhaseInputs
+    type private Phase1Res = OptimizeImplFileRes
+    type private Phase1Fun = Phase1Inputs -> Phase1Res
+    type private Phase2Inputs = IncrementalOptimizationEnv * SignatureHidingInfo * ImplFileOptimizationInfo * CheckedImplFile
+    type private Phase2Res = IncrementalOptimizationEnv * CheckedImplFile
+    type private Phase2Fun = Phase2Inputs -> Phase2Res
+    type private Phase3Inputs = PhaseInputs
+    type private Phase3Res = IncrementalOptimizationEnv * CheckedImplFile
+    type private Phase3Fun = Phase3Inputs -> Phase3Res
 
-    type FileResultsComplete =
+    /// Complete optimization results for a single file
+    type private FileResultsComplete =
         {
             Phase1: Phase1Res
             Phase2: Phase2Res
             Phase3: Phase3Res
         }
 
-    type FilePhaseFuncs = Phase1Fun * Phase2Fun * Phase3Fun
-
-    [<RequireQualifiedAccess>]
-    type OptimizationPhase =
-        | Phase1
-        | Phase2
-        | Phase3
-
-    type FileResults =
+    type private OptimizationFuncs = Phase1Fun * Phase2Fun * Phase3Fun
+        
+    /// Partial optimization results for a single file - mutated as optimization progresses.
+    type private FileResults =
         {
             mutable Phase1: Phase1Res option
             mutable Phase2: Phase2Res option
@@ -105,7 +130,9 @@ module private ParallelOptimization =
                 Phase3 = None
             }
 
-    type Node =
+    /// Identifies a work item scheduled independently of others - consists of a (file) index and OptimizationPhase.
+    /// There are N*3 nodes in the whole optimization process. 
+    type private Node =
         {
             Idx: int
             Phase: OptimizationPhase
@@ -113,20 +140,16 @@ module private ParallelOptimization =
 
         override this.ToString() = $"[{this.Idx}-{this.Phase}]"
 
-    let collectResults
-        (inputs: FileResultsComplete[])
+    /// Final processing of file results to produce output needed for further compilation steps.
+    let private collectFinalResults
+        (fileResults: FileResultsComplete[])
         : (CheckedImplFileAfterOptimization * ImplFileOptimizationInfo)[] * IncrementalOptimizationEnv =
-        let files =
-            inputs
+        let finalFileResults =
+            fileResults
             |> Array.map
-                (fun {
-                         Phase1 = phase1
-                         Phase2 = _phase2
-                         Phase3 = phase3
-                     } ->
-                    let (_, _, implFileOptData, _), optimizeDuringCodeGen = phase1
-                    let _, implFile = phase3
-
+                (fun res ->
+                    let (_, _, implFileOptData, _), optimizeDuringCodeGen = res.Phase1
+                    let _, implFile = res.Phase3
                     let implFile =
                         {
                             ImplFile = implFile
@@ -136,202 +159,177 @@ module private ParallelOptimization =
                     implFile, implFileOptData)
 
         let lastFilePhase1Env =
-            inputs
+            fileResults
             |> Array.last
-            |> fun { Phase1 = phase1 } ->
-                let (optEnvPhase1, _, _, _), _ = phase1
+            |> fun { Phase1 = phase1Res } ->
+                let (optEnvPhase1, _, _, _), _ = phase1Res
                 optEnvPhase1
 
-        files, lastFilePhase1Env
+        finalFileResults, lastFilePhase1Env
 
-    let getPhase2Res (p: FileResults) = p.Phase2 |> Option.get
-
-    let getPhase3Res (p: FileResults) =
-        p.Phase3 |> Option.get |> (fun (env, _) -> env)
+    let private raiseNoResultsExn (node: Node) =
+        raise (exn $"Unexpected lack of results for {node}")
+    
+    let private getPhase1Res (idx: int) (fileResults: FileResults) =
+        match fileResults.Phase1 with
+        | Some res -> res |> fst
+        | None -> raiseNoResultsExn { Idx = idx; Phase = OptimizationPhase.Phase1 }
 
     let optimizeFilesInParallel
         (env0: IncrementalOptimizationEnv)
-        ((phase1, phase2, phase3): FilePhaseFuncs)
+        ((phase1, phase2, phase3): OptimizationFuncs)
         (files: CheckedImplFile list)
         (ct: CancellationToken)
         : (CheckedImplFileAfterOptimization * ImplFileOptimizationInfo)[] * IncrementalOptimizationEnv =
         let files = files |> List.toArray
-
-        let firstNode =
+        let firstNodeToProcess =
             {
                 Idx = 0
                 Phase = OptimizationPhase.Phase1
             }
 
         let results = files |> Array.map (fun _ -> FileResults.Empty)
+        let isNodeUnblocked { Idx = idx; Phase = phase } : bool =
+            let previousPhase = phase |> OptimizationPhase.prev
+            let previousFileReady = if idx = 0 then true else results[ idx - 1 ].HasResult phase
+            let previousPhaseReady =
+                match previousPhase with
+                | Some previousPhase -> results[ idx ].HasResult previousPhase
+                | None -> true
+            previousFileReady && previousPhaseReady
 
-        let _lock = obj ()
+        let visitedNodes = ConcurrentDictionary<Node, unit>()
 
-        let nodeCanBeProcessed { Idx = idx; Phase = phase } : bool =
-            let previousPhase =
-                match phase with
-                | OptimizationPhase.Phase1 -> None
-                | OptimizationPhase.Phase2 -> Some OptimizationPhase.Phase1
-                | OptimizationPhase.Phase3 -> Some OptimizationPhase.Phase2
-
-            lock _lock (fun () ->
-                let previousFileReady = if idx = 0 then true else results[ idx - 1 ].HasResult phase
-
-                let previousPhaseReady =
-                    match previousPhase with
-                    | Some previousPhase -> results[ idx ].HasResult previousPhase
-                    | None -> true
-
-                previousFileReady && previousPhaseReady)
-
-        let visited = HashSet<Node>()
-
+        let dependentNodes (node: Node) =
+            seq {
+                match node.Phase |> OptimizationPhase.next with
+                | Some nextPhase -> yield { node with Phase = nextPhase }
+                | None -> ()
+                
+                if node.Idx < files.Length - 1 then
+                    yield { node with Idx = node.Idx + 1 }
+            }
+            |> Seq.toArray
+        
         let worker ({ Idx = idx; Phase = phase } as node: Node) : Node[] =
-            let notPreviouslyVisited = lock _lock (fun () -> visited.Add node)
-
+            let notPreviouslyVisited = visitedNodes.TryAdd(node, ())
             if notPreviouslyVisited = false then
                 [||]
             else
+                let prevIdx = idx - 1
                 let res = results[idx]
-                let file = files[idx]
-                let previous = if idx > 0 then Some results[idx - 1] else None
-                let hidingInfo0 = SignatureHidingInfo.Empty
-
-                let getPhase1Res (p: FileResults) =
-                    p.Phase1
-                    |> Option.get
-                    |> fun ((env, file, info, hidden), _) -> env, file, info, hidden
+                let previousFileResults = if idx > 0 then Some results[prevIdx] else None
 
                 match phase with
                 | OptimizationPhase.Phase1 ->
-                    // Take env from the previous file
+                    // Take env from previous file if it exists
                     let env, hidingInfo =
-                        previous
-                        |> Option.map getPhase1Res
-                        |> Option.map (fun (a, _b, _c, d) -> a, d)
-                        |> Option.defaultValue (env0, hidingInfo0)
-
-                    let inputs = env, hidingInfo, file
+                        previousFileResults
+                        |> Option.map (getPhase1Res idx)
+                        |> Option.map (fun (env, _file, _optInfo, hidingInfo) -> env, hidingInfo)
+                        |> Option.defaultValue (env0, SignatureHidingInfo.Empty)
+                    let inputs = env, hidingInfo, files[idx]
                     let phase1Res = phase1 inputs
                     res.Phase1 <- Some phase1Res
-
-                    let phase2Node =
-                        {
-                            Idx = idx
-                            Phase = OptimizationPhase.Phase2
-                        }
-
-                    seq {
-                        // Schedule Phase2 for the current file
-                        yield phase2Node
-                        // Schedule Phase1 for the next file if it exists
-                        if idx < files.Length - 1 then
-                            yield
-                                {
-                                    Idx = idx + 1
-                                    Phase = OptimizationPhase.Phase1
-                                }
-                    }
-                    |> Seq.toArray
 
                 | OptimizationPhase.Phase2 ->
                     // Take env from previous file if it exists
                     let env =
-                        previous
-                        |> Option.map getPhase2Res
-                        |> Option.map fst
-                        |> Option.defaultValue env0
+                        match previousFileResults with
+                        | None -> env0
+                        | Some { Phase2 = Some (env, _file) } -> env
+                        | Some { Phase2 = None } ->
+                            raiseNoResultsExn { node with Idx = prevIdx }
 
-                    // Take impl file from Phase1
+                    // Take other inputs from Phase1
                     let file, info, hidingInfo =
                         res
-                        |> getPhase1Res
+                        |> getPhase1Res idx
                         |> (fun (_, file, optimizationInfo, hidingInfo) -> file, optimizationInfo, hidingInfo)
 
                     let inputs = env, hidingInfo, info, file
                     let phase2Res = phase2 inputs
                     res.Phase2 <- Some phase2Res
 
-                    let phase3Node =
-                        {
-                            Idx = idx
-                            Phase = OptimizationPhase.Phase3
-                        }
-
-                    seq {
-                        // Schedule Phase3 for the current file
-                        yield phase3Node
-                        // Schedule Phase2 for the next file if it exists
-                        if idx < files.Length - 1 then
-                            yield
-                                {
-                                    Idx = idx + 1
-                                    Phase = OptimizationPhase.Phase2
-                                }
-                    }
-                    |> Seq.toArray
-
                 | OptimizationPhase.Phase3 ->
                     // Take env from previous file if it exists
                     let env =
-                        match previous with
+                        match previousFileResults with
                         | None -> env0
                         | Some { Phase3 = Some (env, _) } -> env
-                        | Some { Phase3 = None } -> failwith $"Unexpected lack of results for previous file [{idx - 1}], phase 3"
+                        | Some { Phase3 = None } -> raiseNoResultsExn { node with Idx = prevIdx }
 
                     // Take impl file from Phase2
-                    let _, file = res |> getPhase2Res
-                    let hidingInfo = res |> getPhase1Res |> (fun (_, _, _, hidingInfo) -> hidingInfo)
+                    let file =
+                        match res.Phase2 with
+                        | Some (_, file) -> file
+                        | None -> raiseNoResultsExn { node with Phase = OptimizationPhase.Phase2 }
+                    
+                    // Take hidingInfo from Phase1
+                    let hidingInfo = res |> getPhase1Res idx |> (fun (_, _, _, hidingInfo) -> hidingInfo)
+                    
                     let inputs = env, hidingInfo, file
                     let phase3Res = phase3 inputs
                     res.Phase3 <- Some phase3Res
 
-                    seq {
-                        // Schedule Phase3 for the next file if it exists
-                        if idx < files.Length - 1 then
-                            yield
-                                {
-                                    Idx = idx + 1
-                                    Phase = OptimizationPhase.Phase3
-                                }
-                    }
-                    |> Seq.toArray
-                |> fun nodes -> nodes |> Array.filter nodeCanBeProcessed
+                dependentNodes node
+                |> Array.filter isNodeUnblocked
 
         // TODO Do we need to pass in DiagnosticsLogger, or does optimization not use it?
         FSharp.Compiler.Service.Utilities.ParallelProcessing.processInParallel
             "OptimizeInputs"
-            [| firstNode |]
+            [| firstNodeToProcess |]
             worker
-            10
-            (fun () -> visited.Count >= files.Length * 3)
+            // Only up to 3 work items can be processed at the same time due to the shape of the dependency graph between them.
+            3
+            (fun () -> visitedNodes.Count >= files.Length * 3)
             ct
             (fun node -> node.ToString())
 
         Debug.Assert(
-            visited.Count = files.Length * 3,
-            $"Expected to have visited all {files.Length} * 3 = {files.Length * 3} optimization nodes, but visited {visited.Count}"
+            visitedNodes.Count = files.Length * 3,
+            $"Expected to have visited exactly {files.Length} * 3 = {files.Length * 3} optimization nodes, but visited {visitedNodes.Count}."
         )
 
-        let results =
+        let completeFileResults =
             results
             |> Array.mapi
-                (fun i {
-                           Phase1 = phase1
-                           Phase2 = phase2
-                           Phase3 = phase3
-                       } ->
-                    match phase1, phase2, phase3 with
-                    | Some phase1, Some phase2, Some phase3 ->
+                (fun i res ->
+                    match res with
+                    | { Phase1 = Some phase1; Phase2 = Some phase2; Phase3 = Some phase3 } ->
                         {
                             FileResultsComplete.Phase1 = phase1
                             Phase2 = phase2
                             Phase3 = phase3
                         }
-                    | _ -> failwith $"Unexpected lack of optimization results for file [{i}]")
+                    | _ -> failwith $"Unexpected lack of optimization results for file [{i}] after processing all files.")
 
-        let collected = results |> collectResults
-        collected
+        let finalResults = completeFileResults |> collectFinalResults
+        finalResults
+
+let optimizeFilesSequentially optEnv (phase1, phase2, phase3) implFiles =
+    let results, (optEnvFirstLoop, _, _, _) =
+        ((optEnv, optEnv, optEnv, SignatureHidingInfo.Empty), implFiles)
+
+        ||> List.mapFold (fun (optEnvFirstLoop: Optimizer.IncrementalOptimizationEnv, optEnvExtraLoop, optEnvFinalSimplify, hidden) implFile ->
+            let (optEnvFirstLoop, implFile, implFileOptData, hidden), optimizeDuringCodeGen =
+                phase1 (optEnvFirstLoop, hidden, implFile)
+
+            let optEnvExtraLoop, implFile =
+                phase2 (optEnvExtraLoop, hidden, implFileOptData, implFile)
+
+            let optEnvFinalSimplify, implFile =
+                phase3 (optEnvFinalSimplify, hidden, implFile)
+
+            let implFile =
+                {
+                    ImplFile = implFile
+                    OptimizeDuringCodeGen = optimizeDuringCodeGen
+                }
+
+            (implFile, implFileOptData), (optEnvFirstLoop, optEnvExtraLoop, optEnvFinalSimplify, hidden))
+
+    results, optEnvFirstLoop
 
 let ApplyAllOptimizations
     (
@@ -403,9 +401,14 @@ let ApplyAllOptimizations
         use _ =
             FSharp.Compiler.Diagnostics.Activity.start "phase2" [| "QualifiedNameOfFile", implFile.QualifiedNameOfFile.Text |]
 
-        let implFile = LowerLocalMutables.TransformImplFile tcGlobals importMap implFile
+        let implFile =
+            use _ =
+                FSharp.Compiler.Diagnostics.Activity.start "phase2-1" [| "QualifiedNameOfFile", implFile.QualifiedNameOfFile.Text |]
+            LowerLocalMutables.TransformImplFile tcGlobals importMap implFile
 
         if tcConfig.extraOptimizationIterations > 0 then
+            use _ =
+                FSharp.Compiler.Diagnostics.Activity.start "phase2-2" [| "QualifiedNameOfFile", implFile.QualifiedNameOfFile.Text |]
             let (optEnvExtraLoop, implFile, _, _), _ =
                 Optimizer.OptimizeImplFile(
                     phase2And3Settings,
@@ -431,6 +434,8 @@ let ApplyAllOptimizations
 
         let implFile =
             if tcConfig.doDetuple then
+                use _ =
+                    FSharp.Compiler.Diagnostics.Activity.start "phase3-1" [| "QualifiedNameOfFile", implFile.QualifiedNameOfFile.Text |]
                 let implFile = implFile |> Detuple.DetupleImplFile ccu tcGlobals
                 implFile
             else
@@ -438,14 +443,21 @@ let ApplyAllOptimizations
 
         let implFile =
             if tcConfig.doTLR then
+                use _ =
+                    FSharp.Compiler.Diagnostics.Activity.start "phase3-2" [| "QualifiedNameOfFile", implFile.QualifiedNameOfFile.Text |]
                 implFile
                 |> InnerLambdasToTopLevelFuncs.MakeTopLevelRepresentationDecisions ccu tcGlobals
             else
                 implFile
 
-        let implFile = LowerCalls.LowerImplFile tcGlobals implFile
+        let implFile =
+            use _ =
+                FSharp.Compiler.Diagnostics.Activity.start "phase3-3" [| "QualifiedNameOfFile", implFile.QualifiedNameOfFile.Text |]
+            LowerCalls.LowerImplFile tcGlobals implFile
 
         if tcConfig.doFinalSimplify then
+            use _ =
+                FSharp.Compiler.Diagnostics.Activity.start "phase3-4" [| "QualifiedNameOfFile", implFile.QualifiedNameOfFile.Text |]
             let (optEnvFinalSimplify, implFile, _, _), _ =
                 Optimizer.OptimizeImplFile(
                     phase2And3Settings,
@@ -464,38 +476,16 @@ let ApplyAllOptimizations
             optEnvFinalSimplify, implFile
         else
             env, implFile
-
+    
     let results, optEnvFirstLoop =
         match tcConfig.optSettings.processingMode with
         | Optimizer.OptimizationProcessingMode.PartiallyParallel ->
             let ct = CancellationToken.None
-
             let results, optEnvFirstPhase =
                 ParallelOptimization.optimizeFilesInParallel optEnv (phase1, phase2, phase3) implFiles ct
-
             results |> Array.toList, optEnvFirstPhase
         | Optimizer.OptimizationProcessingMode.Sequential ->
-            let results, (optEnvFirstLoop, _, _, _) =
-                ((optEnv, optEnv, optEnv, SignatureHidingInfo.Empty), implFiles)
-
-                ||> List.mapFold (fun (optEnvFirstLoop, optEnvExtraLoop, optEnvFinalSimplify, hidden) implFile ->
-                    let (optEnvFirstLoop, implFile, implFileOptData, hidden), optimizeDuringCodeGen =
-                        phase1 (optEnvFirstLoop, hidden, implFile)
-
-                    let optEnvExtraLoop, implFile =
-                        phase2 (optEnvExtraLoop, hidden, implFileOptData, implFile)
-
-                    let optEnvFinalSimplify, implFile = phase3 (optEnvFinalSimplify, hidden, implFile)
-
-                    let implFile =
-                        {
-                            ImplFile = implFile
-                            OptimizeDuringCodeGen = optimizeDuringCodeGen
-                        }
-
-                    (implFile, implFileOptData), (optEnvFirstLoop, optEnvExtraLoop, optEnvFinalSimplify, hidden))
-
-            results, optEnvFirstLoop
+            optimizeFilesSequentially optEnv (phase1, phase2, phase3) implFiles
 
 #if DEBUG
     if tcConfig.showOptimizationData then
