@@ -31,7 +31,6 @@
     <Compile Include="Code\Utils.fs" />
     <Compile Include="Code\Types.fs" />
     <Compile Include="Code\Graph.fs" />
-    <Compile Include="Code\AlwaysLinkDetection.fs" />
     <Compile Include="Code\TrieMapping.fs" />
     <Compile Include="Code\FileContentMapping.fs" />
     <Compile Include="Code\DependencyResolution.fs" />
@@ -47,7 +46,6 @@
     <Content Include="Tests\.gitignore" />
     <Compile Include="Tests\TypedTreeGraph.fs" />
     <Compile Include="Tests\QueryTrieTests.fs" />
-    <Compile Include="Tests\AlwaysLinkDetectionTests.fs" />
     <Compile Include="Tests\TrieMappingTests.fs" />
     <Compile Include="Tests\FileContentMappingTests.fs" />
     <Compile Include="Tests\Scenarios.fs" />

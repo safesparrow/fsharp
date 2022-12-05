@@ -501,4 +501,27 @@ let b = a + 1
 """
                     (set [| 1 |])
             ]
+        scenario
+            "Top level module with AutoOpen attribute and namespace prefix"
+            [
+                sourceFile
+                    "A.fs"
+                    """
+[<AutoOpen>]
+module X.Y.Z
+
+type A = { A : int }
+"""
+                    Set.empty
+                sourceFile
+                    "Library.fs"
+                    """
+module Library
+
+open X.Y
+
+let fn (a: A) = ()
+"""
+                    (set [| 0 |])
+            ]
     ]

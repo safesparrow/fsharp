@@ -40,7 +40,7 @@ let ``Basic trie`` () =
     let trie = TrieMapping.mkTrie files
 
     match trie.Current with
-    | TrieNodeInfo.Root -> ()
+    | TrieNodeInfo.Root _ -> ()
     | current -> Assert.Fail($"mkTrie should always return a TrieNodeInfo.Root, got {current}")
 
     let xNode = trie.Children.["X"]
@@ -114,3 +114,135 @@ let a = 0
     Assert.AreEqual(set [| 0 |], bNode.Files)
     let cNode = bNode.Children.["C"]
     Assert.AreEqual(set [| 0 |], cNode.Files)
+
+[<Test>]
+let ``Global namespace should link files to the root node`` () =
+    let trie =
+        TrieMapping.mkTrie
+            [|
+                {
+                    Idx = 0
+                    File = "A.fs"
+                    AST =
+                        parseSourceCode (
+                            "A.fs",
+                            """
+namespace global
+
+type A = { A : int }
+"""
+                        )
+                }
+                {
+                    Idx = 1
+                    File = "B.fsi"
+                    AST =
+                        parseSourceCode (
+                            "B.fsi",
+                            """
+namespace global
+
+type B = { Y : int }
+"""
+                        )
+                }
+            |]
+
+    Assert.AreEqual(set [| 0; 1 |], trie.Files)
+
+[<Test>]
+let ``Module with a single ident and AutoOpen attribute should link files to root`` () =
+    let trie =
+        TrieMapping.mkTrie
+            [|
+                {
+                    Idx = 0
+                    File = "A.fs"
+                    AST =
+                        parseSourceCode (
+                            "A.fs",
+                            """
+[<AutoOpen>]
+module A
+
+type A = { A : int }
+"""
+                        )
+                }
+                {
+                    Idx = 1
+                    File = "B.fsi"
+                    AST =
+                        parseSourceCode (
+                            "B.fsi",
+                            """
+[<AutoOpen>]
+module B
+
+type B = { Y : int }
+"""
+                        )
+                }
+            |]
+
+    Assert.AreEqual(set [| 0; 1 |], trie.Files)
+    let aNode = trie.Children.["A"]
+    Assert.AreEqual(set [| 0 |], aNode.Files)
+    let bNode = trie.Children.["B"]
+    Assert.AreEqual(set [| 1 |], bNode.Files)
+
+[<Test>]
+let ``Module with AutoOpen attribute and two ident should expose file at two levels`` () =
+    let trie =
+        TrieMapping.mkTrie
+            [|
+                {
+                    Idx = 0
+                    File = "Y.fs"
+                    AST =
+                        parseSourceCode (
+                            "Y.fs",
+                            """
+[<AutoOpen>]
+module X.Y
+
+type A = { A : int }
+"""
+                        )
+                }
+            |]
+
+    Assert.AreEqual(Set.empty, trie.Files)
+    let xNode = trie.Children.["X"]
+    Assert.AreEqual(set [| 0 |], xNode.Files)
+    let yNode = xNode.Children.["Y"]
+    Assert.AreEqual(set [| 0 |], yNode.Files)
+
+[<Test>]
+let ``Module with AutoOpen attribute and three ident should expose file at last two levels`` () =
+    let trie =
+        TrieMapping.mkTrie
+            [|
+                {
+                    Idx = 0
+                    File = "Z.fsi"
+                    AST =
+                        parseSourceCode (
+                            "Z.fsi",
+                            """
+[<AutoOpen>]
+module X.Y.Z
+
+type A = { A : int }
+"""
+                        )
+                }
+            |]
+
+    Assert.AreEqual(Set.empty, trie.Files)
+    let xNode = trie.Children.["X"]
+    Assert.AreEqual(Set.empty, xNode.Files)
+    let yNode = xNode.Children.["Y"]
+    Assert.AreEqual(set [| 0 |], yNode.Files)
+    let zNode = yNode.Children.["Z"]
+    Assert.AreEqual(set [| 0 |], zNode.Files)
