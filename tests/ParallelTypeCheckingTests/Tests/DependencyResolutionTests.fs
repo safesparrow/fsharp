@@ -1,7 +1,6 @@
 ﻿module ParallelTypeCheckingTests.Tests.DependencyResolutionTests
 
 open NUnit.Framework
-open FSharp.Compiler.Service.Tests.Common
 open ParallelTypeCheckingTests.DependencyResolution
 open ParallelTypeCheckingTests
 open Scenarios

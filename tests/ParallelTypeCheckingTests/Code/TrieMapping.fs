@@ -95,198 +95,150 @@ let mergeTrieNodes (defaultChildSize: int) (tries: TrieNode array) =
 
         root
 
+/// Process a top level SynModuleOrNamespace(Sig)
+let processSynModuleOrNamespace<'Decl>
+    (mkTrieForDeclaration: int -> 'Decl -> KeyValuePair<string, TrieNode> option)
+    (idx: int)
+    (name: LongIdent)
+    (attributes: SynAttributes)
+    (kind: SynModuleOrNamespaceKind)
+    (hasTypesOrAutoOpenNestedModules: bool)
+    (decls: 'Decl list)
+    : TrieNode =
+    let isNamespace =
+        match kind with
+        | SynModuleOrNamespaceKind.AnonModule
+        | SynModuleOrNamespaceKind.NamedModule -> false
+        | SynModuleOrNamespaceKind.DeclaredNamespace
+        | SynModuleOrNamespaceKind.GlobalNamespace -> true
+
+    let children =
+        // Process the name of the ModuleOrNamespace.
+        // For each part in the name a TrieNode shall be created.
+        // Only the last node can be a module, depending on the SynModuleOrNamespaceKind.
+        let rec visit continuation (xs: LongIdent) =
+            match xs with
+            | [] -> failwith "should not be empty"
+            | [ finalPart ] ->
+                let name = finalPart.idText
+
+                // A module always exposes the file index, as it could expose values and functions.
+                // A namespace only exposes the file when it has types or nested modules with an [<AutoOpen>] attribute.
+                // The reasoning is that a type could be inferred and a nested auto open module will lift its content one level up.
+                let current =
+                    if isNamespace then
+                        TrieNodeInfo.Namespace(
+                            name,
+                            (if hasTypesOrAutoOpenNestedModules then
+                                 hs idx
+                             else
+                                 emptyHS ())
+                        )
+                    else
+                        TrieNodeInfo.Module(name, idx)
+
+                let children = List.choose (mkTrieForDeclaration idx) decls
+
+                continuation (
+                    Dictionary<_, _>(
+                        Seq.singleton (
+                            KeyValuePair(
+                                name,
+                                {
+                                    Current = current
+                                    Children = Dictionary(children)
+                                }
+                            )
+                        )
+                    )
+                )
+            | head :: tail ->
+                let name = head.idText
+
+                visit
+                    (fun node ->
+                        let files =
+                            match tail with
+                            | [ _ ] ->
+                                // In case you have:
+                                // [<AutoOpen>]
+                                // module A.B
+                                //
+                                // We should consider the namespace A to expose the current file.
+                                // Due to the [<AutoOpen>] we treat A the same way we would module B.
+                                let topLevelModuleOrNamespaceHasAutoOpen = isAnyAttributeAutoOpen attributes
+
+                                if topLevelModuleOrNamespaceHasAutoOpen && not isNamespace then
+                                    hs idx
+                                else
+                                    emptyHS ()
+                            | _ -> emptyHS ()
+
+                        let current = TrieNodeInfo.Namespace(name, files)
+
+                        Dictionary<_, _>(Seq.singleton (KeyValuePair(name, { Current = current; Children = node })))
+                        |> continuation)
+                    tail
+
+        if List.isEmpty name then
+            // This can happen for a namespace global.
+            // We collect the child nodes from the decls
+            List.choose (mkTrieForDeclaration idx) decls |> Dictionary
+        else
+            visit id name
+
+    {
+        Current = Root(emptyHS ())
+        Children = children
+    }
+
 let rec mkTrieNodeFor (file: FileWithAST) : TrieNode =
     let idx = file.Idx
-    let fileExposesToRoot = doesFileExposeContentToTheRoot file.AST
 
-    match file.AST with
-    | ParsedInput.SigFile (ParsedSigFileInput (contents = contents)) ->
-        contents
-        |> List.choose
-            (fun (SynModuleOrNamespaceSig (longId = longId; kind = kind; attribs = attribs; decls = decls; accessibility = _accessibility)) ->
-                let hasTypesOrAutoOpenNestedModules =
-                    List.exists
-                        (function
-                        | SynModuleSigDecl.Types _ -> true
-                        | SynModuleSigDecl.NestedModule(moduleInfo = SynComponentInfo (attributes = attributes)) ->
-                            isAnyAttributeAutoOpen attributes
-                        | _ -> false)
-                        decls
+    if doesFileExposeContentToTheRoot file.AST then
+        // If a file exposes content which does not need an open statement to access, we consider the file to be part of the root.
+        {
+            Current = Root(hs idx)
+            Children = Dictionary(0)
+        }
+    else
+        match file.AST with
+        | ParsedInput.SigFile (ParsedSigFileInput (contents = contents)) ->
+            contents
+            |> List.map
+                (fun (SynModuleOrNamespaceSig (longId = longId
+                                               kind = kind
+                                               attribs = attribs
+                                               decls = decls
+                                               accessibility = _accessibility)) ->
+                    let hasTypesOrAutoOpenNestedModules =
+                        List.exists
+                            (function
+                            | SynModuleSigDecl.Types _ -> true
+                            | SynModuleSigDecl.NestedModule(moduleInfo = SynComponentInfo (attributes = attributes)) ->
+                                isAnyAttributeAutoOpen attributes
+                            | _ -> false)
+                            decls
 
-                let isNamespace =
-                    match kind with
-                    | SynModuleOrNamespaceKind.AnonModule
-                    | SynModuleOrNamespaceKind.NamedModule -> false
-                    | SynModuleOrNamespaceKind.DeclaredNamespace
-                    | SynModuleOrNamespaceKind.GlobalNamespace -> true
+                    processSynModuleOrNamespace mkTrieForSynModuleSigDecl idx longId attribs kind hasTypesOrAutoOpenNestedModules decls)
+            |> List.toArray
+            |> mergeTrieNodes contents.Length
+        | ParsedInput.ImplFile (ParsedImplFileInput (contents = contents)) ->
+            contents
+            |> List.map
+                (fun (SynModuleOrNamespace (longId = longId; attribs = attribs; kind = kind; decls = decls; accessibility = _accessibility)) ->
+                    let hasTypesOrAutoOpenNestedModules =
+                        List.exists
+                            (function
+                            | SynModuleDecl.Types _ -> true
+                            | SynModuleDecl.NestedModule(moduleInfo = SynComponentInfo (attributes = attributes)) ->
+                                isAnyAttributeAutoOpen attributes
+                            | _ -> false)
+                            decls
 
-                let rootFiles = if fileExposesToRoot then hs idx else emptyHS ()
-
-                let children =
-                    let rec visit continuation (xs: LongIdent) =
-                        match xs with
-                        | [] -> failwith "should even empty"
-                        | [ finalPart ] ->
-                            let name = finalPart.idText
-
-                            let current =
-                                if isNamespace then
-                                    TrieNodeInfo.Namespace(
-                                        name,
-                                        (if hasTypesOrAutoOpenNestedModules then
-                                             hs idx
-                                         else
-                                             emptyHS ())
-                                    )
-                                else
-                                    TrieNodeInfo.Module(name, idx)
-
-                            let children = List.choose (mkTrieForNestedSigModule idx) decls
-
-                            continuation (
-                                Dictionary<_, _>(
-                                    Seq.singleton (
-                                        KeyValuePair(
-                                            name,
-                                            {
-                                                Current = current
-                                                Children = Dictionary(children)
-                                            }
-                                        )
-                                    )
-                                )
-                            )
-                        | head :: tail ->
-                            let name = head.idText
-
-                            visit
-                                (fun node ->
-                                    let files =
-                                        match tail with
-                                        | [ _ ] ->
-                                            let topLevelModuleOrNamespaceHasAutoOpen = isAnyAttributeAutoOpen attribs
-
-                                            if topLevelModuleOrNamespaceHasAutoOpen && not isNamespace then
-                                                hs idx
-                                            else
-                                                emptyHS ()
-                                        | _ -> emptyHS ()
-
-                                    let current = TrieNodeInfo.Namespace(name, files)
-
-                                    Dictionary<_, _>(Seq.singleton (KeyValuePair(name, { Current = current; Children = node })))
-                                    |> continuation)
-                                tail
-
-                    if List.isEmpty longId then
-                        // This can happen for a namespace global.
-                        // We collect the child nodes from the decls
-                        List.choose (mkTrieForNestedSigModule idx) decls |> Dictionary
-                    else
-                        visit id longId
-
-                Some
-                    {
-                        Current = Root rootFiles
-                        Children = children
-                    })
-        |> List.toArray
-        |> mergeTrieNodes contents.Length
-    | ParsedInput.ImplFile (ParsedImplFileInput (contents = contents)) ->
-        contents
-        |> List.choose
-            (fun (SynModuleOrNamespace (longId = longId; attribs = attribs; kind = kind; decls = decls; accessibility = _accessibility)) ->
-                let hasTypesOrAutoOpenNestedModules =
-                    List.exists
-                        (function
-                        | SynModuleDecl.Types _ -> true
-                        | SynModuleDecl.NestedModule(moduleInfo = SynComponentInfo (attributes = attributes)) ->
-                            isAnyAttributeAutoOpen attributes
-                        | _ -> false)
-                        decls
-
-                let isNamespace =
-                    match kind with
-                    | SynModuleOrNamespaceKind.AnonModule
-                    | SynModuleOrNamespaceKind.NamedModule -> false
-                    | SynModuleOrNamespaceKind.DeclaredNamespace
-                    | SynModuleOrNamespaceKind.GlobalNamespace -> true
-
-                let rootFiles = if fileExposesToRoot then hs idx else emptyHS ()
-
-                let children =
-                    let rec visit
-                        (continuation: Dictionary<ModuleSegment, TrieNode> -> Dictionary<ModuleSegment, TrieNode>)
-                        (xs: LongIdent)
-                        : Dictionary<ModuleSegment, TrieNode> =
-                        match xs with
-                        | [] -> failwith "should even empty"
-                        | [ finalPart ] ->
-                            let name = finalPart.idText
-
-                            let current =
-                                if isNamespace then
-                                    TrieNodeInfo.Namespace(
-                                        name,
-                                        (if hasTypesOrAutoOpenNestedModules then
-                                             hs idx
-                                         else
-                                             emptyHS ())
-                                    )
-                                else
-                                    TrieNodeInfo.Module(name, idx)
-
-                            let children = List.choose (mkTrieForSynModuleDecl idx) decls
-
-                            continuation (
-                                Dictionary<_, _>(
-                                    Seq.singleton (
-                                        KeyValuePair(
-                                            name,
-                                            {
-                                                Current = current
-                                                Children = Dictionary(children)
-                                            }
-                                        )
-                                    )
-                                )
-                            )
-                        | head :: tail ->
-                            let name = head.idText
-
-                            visit
-                                (fun node ->
-                                    let files =
-                                        match tail with
-                                        | [ _ ] ->
-                                            let topLevelModuleOrNamespaceHasAutoOpen = isAnyAttributeAutoOpen attribs
-
-                                            if topLevelModuleOrNamespaceHasAutoOpen && not isNamespace then
-                                                hs idx
-                                            else
-                                                emptyHS ()
-                                        | _ -> emptyHS ()
-
-                                    let current = TrieNodeInfo.Namespace(name, files)
-
-                                    Dictionary<_, _>(Seq.singleton (KeyValuePair(name, { Current = current; Children = node })))
-                                    |> continuation)
-                                tail
-
-                    if List.isEmpty longId then
-                        // This can happen for anonymous modules and namespace global.
-                        // We collect the child nodes from the decls
-                        List.choose (mkTrieForSynModuleDecl idx) decls |> Dictionary
-                    else
-                        visit id longId
-
-                Some
-                    {
-                        Current = Root rootFiles
-                        Children = children
-                    })
-        |> List.toArray
-        |> mergeTrieNodes contents.Length
+                    processSynModuleOrNamespace mkTrieForSynModuleDecl idx longId attribs kind hasTypesOrAutoOpenNestedModules decls)
+            |> List.toArray
+            |> mergeTrieNodes contents.Length
 
 and mkTrieForSynModuleDecl (fileIndex: int) (decl: SynModuleDecl) : KeyValuePair<string, TrieNode> option =
     match decl with
@@ -305,11 +257,11 @@ and mkTrieForSynModuleDecl (fileIndex: int) (decl: SynModuleDecl) : KeyValuePair
         )
     | _ -> None
 
-and mkTrieForNestedSigModule (fileIndex: int) (decl: SynModuleSigDecl) : KeyValuePair<string, TrieNode> option =
+and mkTrieForSynModuleSigDecl (fileIndex: int) (decl: SynModuleSigDecl) : KeyValuePair<string, TrieNode> option =
     match decl with
     | SynModuleSigDecl.NestedModule (moduleInfo = SynComponentInfo(longId = [ nestedModuleIdent ]); moduleDecls = decls) ->
         let name = nestedModuleIdent.idText
-        let children = List.choose (mkTrieForNestedSigModule fileIndex) decls
+        let children = List.choose (mkTrieForSynModuleSigDecl fileIndex) decls
 
         Some(
             KeyValuePair(

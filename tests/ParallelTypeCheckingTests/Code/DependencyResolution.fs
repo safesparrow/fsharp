@@ -193,7 +193,6 @@ let mkGraph (files: FileWithAST array) : Graph<int> =
         |> Map.ofArray
 
     // Implementation files backed by signatures should be excluded to construct the trie.
-    // Signature files should link to the implementation index instead.
     let trieInput =
         Array.choose
             (fun f ->

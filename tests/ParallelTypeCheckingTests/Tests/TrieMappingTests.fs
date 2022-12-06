@@ -186,10 +186,7 @@ type B = { Y : int }
             |]
 
     Assert.AreEqual(set [| 0; 1 |], trie.Files)
-    let aNode = trie.Children.["A"]
-    Assert.AreEqual(set [| 0 |], aNode.Files)
-    let bNode = trie.Children.["B"]
-    Assert.AreEqual(set [| 1 |], bNode.Files)
+    Assert.AreEqual(0, trie.Children.Count)
 
 [<Test>]
 let ``Module with AutoOpen attribute and two ident should expose file at two levels`` () =
