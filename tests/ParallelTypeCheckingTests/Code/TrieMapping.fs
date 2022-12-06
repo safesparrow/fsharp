@@ -61,7 +61,6 @@ let mergeTrieNodes (defaultChildSize: int) (tries: TrieNode array) =
             match node.Current, v.Current with
             | TrieNodeInfo.Namespace (filesThatExposeTypes = currentFiles), TrieNodeInfo.Namespace (filesThatExposeTypes = otherFiles) ->
                 for otherFile in otherFiles do
-                    do ()
                     currentFiles.Add(otherFile) |> ignore
             | _ -> ()
 

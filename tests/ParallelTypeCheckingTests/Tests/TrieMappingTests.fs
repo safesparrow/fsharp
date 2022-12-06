@@ -274,3 +274,40 @@ module Z =
     Assert.AreEqual(set [| 0 |], yNode.Files)
     let zNode = yNode.Children.["Z"]
     Assert.AreEqual(set [| 0 |], zNode.Files)
+
+[<Test>]
+let ``Two modules with the same name, only the first file exposes the index`` () =
+    let trie =
+        TrieMapping.mkTrie
+            [|
+                {
+                    Idx = 0
+                    File = "A.fs"
+                    AST =
+                        parseSourceCode (
+                            "A.fs",
+                            """
+module A
+
+type B = { C: int }
+"""
+                        )
+                }
+                {
+                    Idx = 1
+                    File = "A2.fs"
+                    AST =
+                        parseSourceCode (
+                            "A2.fs",
+                            """
+module A
+
+let _ = ()
+"""
+                        )
+                }
+            |]
+
+    Assert.AreEqual(1, trie.Children.Count)
+    let aNode = trie.Children.["A"]
+    Assert.AreEqual(set [| 0 |], aNode.Files)
