@@ -246,3 +246,34 @@ type A = { A : int }
     Assert.AreEqual(set [| 0 |], yNode.Files)
     let zNode = yNode.Children.["Z"]
     Assert.AreEqual(set [| 0 |], zNode.Files)
+
+[<Test>]
+let ``Nested AutoOpen module in namespace will expose the file to the namespace node`` () =
+    let trie =
+        TrieMapping.mkTrie
+            [|
+                {
+                    Idx = 0
+                    File = "Z.fs"
+                    AST =
+                        parseSourceCode (
+                            "Z.fs",
+                            """
+namespace X.Y
+
+[<AutoOpen>]
+module Z =
+
+    type A = { A: int }
+"""
+                        )
+                }
+            |]
+
+    Assert.AreEqual(Set.empty, trie.Files)
+    let xNode = trie.Children.["X"]
+    Assert.AreEqual(Set.empty, xNode.Files)
+    let yNode = xNode.Children.["Y"]
+    Assert.AreEqual(set [| 0 |], yNode.Files)
+    let zNode = yNode.Children.["Z"]
+    Assert.AreEqual(set [| 0 |], zNode.Files)

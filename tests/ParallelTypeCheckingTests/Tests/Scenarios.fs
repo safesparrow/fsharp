@@ -524,4 +524,29 @@ let fn (a: A) = ()
 """
                     (set [| 0 |])
             ]
+        scenario
+            "Nested AutoOpen module in namespace is accessed via namespace open"
+            [
+                sourceFile
+                    "Z.fs"
+                    """
+namespace X.Y
+
+[<AutoOpen>]
+module Z =
+
+    type A = { A: int }
+"""
+                    Set.empty
+                sourceFile
+                    "Library.fs"
+                    """
+module Library
+
+open X.Y
+
+let fn (a: A) = ()
+"""
+                    (set [| 0 |])
+            ]
     ]

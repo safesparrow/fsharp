@@ -1,6 +1,5 @@
 ﻿module ParallelTypeCheckingTests.DependencyResolution
 
-open System.Linq
 open FSharp.Compiler.Syntax
 open ParallelTypeCheckingTests
 
