@@ -33,7 +33,7 @@ let processInParallel
                 processedCount)
 
         // let toScheduleString =
-            // toSchedule |> Array.map _itemToString |> (fun names -> String.Join(", ", names))
+        // toSchedule |> Array.map _itemToString |> (fun names -> String.Join(", ", names))
 
         // printfn $"Scheduling {toSchedule.Length} items: {toScheduleString}"
         toSchedule |> Array.iter bc.Add
