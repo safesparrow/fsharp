@@ -4,12 +4,10 @@
 module internal FSharp.Compiler.ParseAndCheckInputs
 
 open System
-open System.Collections.Concurrent
 open System.Diagnostics
 open System.IO
 open System.Collections.Generic
 
-open System.Threading
 open Internal.Utilities.Collections
 open Internal.Utilities.Library
 open Internal.Utilities.Library.Extras
@@ -1465,7 +1463,8 @@ let CheckOneInputAux'
                          checkForErrors,
                          conditionalDefines,
                          tcSink,
-                         tcConfig.internalTestSpanStackReferring)
+                         tcConfig.internalTestSpanStackReferring,
+                         tcConfig.diagnosticsOptions)
                         tcState.tcsTcSigEnv
                         file
 
@@ -1534,7 +1533,8 @@ let CheckOneInputAux'
                         tcConfig.internalTestSpanStackReferring,
                         tcState.tcsTcImplEnv,
                         rootSigOpt,
-                        file
+                        file,
+                        tcConfig.diagnosticsOptions
                     )
 
                 // printfn $"Finished Processing Impl {file.FileName}"

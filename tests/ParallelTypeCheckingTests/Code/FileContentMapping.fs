@@ -264,10 +264,6 @@ let visitSynType (t: SynType) : FileContentEntry list =
         | SynType.WithGlobalConstraints (typeName, constraints, _) ->
             visit typeName (fun nodes -> nodes @ lc visitSynTypeConstraint constraints |> continuation)
         | SynType.HashConstraint (innerType, _) -> visit innerType continuation
-        | SynType.MeasureDivide (dividend, divisor, _) ->
-            let continuations = List.map visit [ dividend; divisor ]
-            let finalContinuation = lc id >> continuation
-            Continuation.sequence continuations finalContinuation
         | SynType.MeasurePower (baseMeasure = baseMeasure) -> visit baseMeasure continuation
         | SynType.StaticConstant _ -> continuation []
         | SynType.StaticConstantExpr (expr, _) -> continuation (visitSynExpr expr)
