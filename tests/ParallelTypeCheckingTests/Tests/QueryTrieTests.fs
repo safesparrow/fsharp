@@ -619,7 +619,7 @@ let indexOf name =
 // This should be constructed from the AST, again a hard coded subset of Fantomas.Core
 let fantomasCoreTrie: TrieNode =
     {
-        Current = TrieNodeInfo.Root
+        Current = TrieNodeInfo.Root(emptyHS ())
         Children =
             dictionary
                 [|
@@ -771,6 +771,7 @@ let ``ProcessOpenStatement full path match`` () =
                     indexOf "TriviaTypes.fs"
                     indexOf "Utils.fs"
                 |])
+            Set.empty
 
     let result =
         processOpenPath (queryTrie fantomasCoreTrie) [ "Fantomas"; "Core"; "AstExtensions" ] state

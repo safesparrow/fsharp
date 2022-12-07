@@ -1,6 +1,5 @@
 ﻿module ParallelTypeCheckingTests.DependencyResolution
 
-open System.Linq
 open FSharp.Compiler.Syntax
 open ParallelTypeCheckingTests
 
@@ -194,7 +193,6 @@ let mkGraph (files: FileWithAST array) : Graph<int> =
         |> Map.ofArray
 
     // Implementation files backed by signatures should be excluded to construct the trie.
-    // Signature files should link to the implementation index instead.
     let trieInput =
         Array.choose
             (fun f ->
@@ -208,33 +206,18 @@ let mkGraph (files: FileWithAST array) : Graph<int> =
 
     let fileContents = Array.Parallel.map FileContentMapping.mkFileContent files
 
-    let filesWithAutoOpen =
-        Array.choose
-            (fun f ->
-                if AlwaysLinkDetection.doesFileHasAutoOpenBehavior f.AST then
-                    Some f.Idx
-                else
-                    None)
-            trieInput
-
     let findDependencies (file: FileWithAST) : int * int array =
         let fileContent = fileContents.[file.Idx]
         let knownFiles = getFileNameBefore files file.Idx
+        let filesFromRoot = trie.Files |> Set.filter (fun rootIdx -> rootIdx < file.Idx)
 
         // Process all entries of a file and query the trie when required to find the dependent files.
         let result =
             // Seq is faster than List in this case.
-            Seq.fold (processStateEntry queryTrie) (FileContentQueryState.Create file.Idx knownFiles) fileContent
+            Seq.fold (processStateEntry queryTrie) (FileContentQueryState.Create file.Idx knownFiles filesFromRoot) fileContent
 
         // after processing the file we should verify if any of the open statements are found in the trie but do not yield any file link.
         let ghostDependencies = collectGhostDependencies file.Idx trie queryTrie result
-
-        // Automatically add all files that came before the current file that use the [<AutoOpen>] attribute.
-        let topLevelAutoOpenFiles =
-            if Array.isEmpty filesWithAutoOpen then
-                Array.empty
-            else
-                [| 0 .. (file.Idx - 1) |].Intersect(filesWithAutoOpen).ToArray()
 
         // Automatically add a link from an implementation to its signature file (if present)
         let signatureDependency =
@@ -246,7 +229,6 @@ let mkGraph (files: FileWithAST array) : Graph<int> =
             [|
                 yield! result.FoundDependencies
                 yield! ghostDependencies
-                yield! topLevelAutoOpenFiles
                 yield! signatureDependency
             |]
             |> Array.distinct

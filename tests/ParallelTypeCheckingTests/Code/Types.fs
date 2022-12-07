@@ -18,13 +18,13 @@ type FileWithAST =
 /// Only when the namespace exposes types that could later be inferred.
 /// Children of a namespace don't automatically depend on each other for that reason
 type TrieNodeInfo =
-    | Root
+    | Root of files: HashSet<int>
     | Module of segment: string * file: int
     | Namespace of segment: string * filesThatExposeTypes: HashSet<int>
 
     member x.Files: Set<int> =
         match x with
-        | Root -> failwith "Root has no files"
+        | Root files -> set files
         | Module (file = file) -> Set.singleton file
         | Namespace (filesThatExposeTypes = files) -> set files
 
@@ -65,11 +65,11 @@ type FileContentQueryState =
         KnownFiles: Set<int>
     }
 
-    static member Create (fileIndex: int) (knownFiles: Set<int>) =
+    static member Create (fileIndex: int) (knownFiles: Set<int>) (filesAtRoot: Set<int>) =
         {
             OwnNamespace = None
             OpenedNamespaces = Set.empty
-            FoundDependencies = Set.empty
+            FoundDependencies = filesAtRoot
             CurrentFile = fileIndex
             KnownFiles = knownFiles
         }
