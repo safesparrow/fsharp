@@ -136,7 +136,6 @@ let CheckMultipleInputsInParallel
             let parsedInput, logger = inputsWithLoggers.[fileIdx]
             processFile (parsedInput, logger) state
 
-        let folder: bool -> State -> SingleResult -> FinalFileResult * State = folder
         let _qnof = QualifiedNameOfFile.QualifiedNameOfFile(Ident("", Range.Zero))
         let state: State = tcState, priorErrors
 
@@ -145,10 +144,7 @@ let CheckMultipleInputsInParallel
                 graph
                 processFile
                 folder
-                // When combining results, order them by index
-                id
                 state
-                (fun _ -> true)
                 10
 
         partialResults |> Array.toList, tcState)

@@ -88,6 +88,7 @@ let internal codebaseToConfig code method =
         WorkingDir = Some code.WorkDir
     }
 
+/// Before running this test, you must prepare the codebase by running the script 'FCS.prepare.ps1'
 [<TestCaseSource(nameof (codebases))>]
 [<Explicit("Slow, only useful as a sanity check that the test codebase is sound and type-checks using the old method")>]
 let ``1. Test sequential type-checking`` (code: Codebase) =
