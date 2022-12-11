@@ -48,7 +48,6 @@ let setupOtel () =
 type internal Args =
     {
         Path: string
-        LineLimit: int option
         Method: Method
         WorkingDir: string option
     }

@@ -140,7 +140,7 @@ let CheckMultipleInputsInParallel
         let state: State = tcState, priorErrors
 
         let partialResults, (tcState, _) =
-            GraphProcessing.processGraph<int, State, SingleResult, FinalFileResult>
+            TypeCheckingGraphProcessing.processGraph<int, State, SingleResult, FinalFileResult>
                 graph
                 processFile
                 folder

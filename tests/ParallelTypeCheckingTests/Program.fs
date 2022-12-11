@@ -2,30 +2,29 @@
 
 #nowarn "1182"
 
-open FSharp.Compiler.CompilerConfig
+open System
 open ParallelTypeCheckingTests.TestUtils
 
-// let _parse (argv: string[]) : Args =
-//     let parseMode (mode: string) =
-//         match mode.ToLower() with
-//         | "sequential" -> Method.Sequential
-//         | "parallelfs" -> Method.ParallelCheckingOfBackedImplFiles
-//         | "graph" -> Method.Graph
-//         | _ -> failwith $"Unrecognised mode: {mode}"
-//
-//     let path, mode, workingDir =
-//         match argv with
-//         | [| path |] -> path, Method.Sequential, None
-//         | [| path; method |] -> path, parseMode method, None
-//         | [| path; method; workingDir |] -> path, parseMode method, Some workingDir
-//         | _ -> failwith "Invalid args - use 'args_path [method [fs-parallel]]'"
-//
-//     {
-//         Path = path
-//         LineLimit = None
-//         Method = mode
-//         WorkingDir = workingDir
-//     }
+let parseMethod (method: string) =
+    match method.ToLower() with
+    | "sequential" -> Method.Sequential
+    | "parallelfs" -> Method.ParallelCheckingOfBackedImplFiles
+    | "graph" -> Method.Graph
+    | _ -> failwith $"Unrecognised mode: {method}"
+
+let parse (argv: string[]) : Args =
+    match argv with
+    | [| codebaseNr; method |] ->
+        let codebaseNr = Int32.Parse codebaseNr
+        let code = TestCompilationFromCmdlineArgs.codebases[codebaseNr]
+        let method = parseMethod method
+        TestCompilationFromCmdlineArgs.codebaseToConfig code method
+    | _ -> failwith "Invalid args - use 'args_path [method [fs-parallel]]'"
 
 [<EntryPoint>]
-let main _argv = 0
+let main argv =
+    FSharp.Compiler.ParseAndCheckInputs.CheckMultipleInputsUsingGraphMode <-
+        ParallelTypeChecking.CheckMultipleInputsInParallel
+    let args = parse argv
+    TestCompilationFromCmdlineArgs.TestCompilerFromArgs args
+    0

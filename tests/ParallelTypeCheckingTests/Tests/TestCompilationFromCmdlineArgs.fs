@@ -12,7 +12,6 @@ type Codebase =
     {
         WorkDir: string
         Path: string
-        Limit: int option
     }
 
 let codebases =
@@ -20,19 +19,16 @@ let codebases =
         {
             WorkDir = $@"{__SOURCE_DIRECTORY__}\.fcs_test\src\compiler"
             Path = $@"{__SOURCE_DIRECTORY__}\FCS.args.txt"
-            Limit = None
         }
         {
             WorkDir = $@"{__SOURCE_DIRECTORY__}\.fcs_test\tests\FSharp.Compiler.ComponentTests"
             Path = $@"{__SOURCE_DIRECTORY__}\ComponentTests.args.txt"
-            Limit = None
         }
     |]
 
 let internal setupParsed config =
     let {
             Path = path
-            LineLimit = lineLimit
             Method = method
             WorkingDir = workingDir
         } =
@@ -40,10 +36,6 @@ let internal setupParsed config =
 
     let args =
         System.IO.File.ReadAllLines(path |> replacePaths)
-        |> fun lines ->
-            match lineLimit with
-            | Some limit -> Array.take (Math.Min(limit, lines.Length)) lines
-            | None -> lines
         |> Array.map replacePaths
 
     setupCompilationMethod method
@@ -83,7 +75,6 @@ let internal TestCompilerFromArgs (config: Args) : unit =
 let internal codebaseToConfig code method =
     {
         Path = code.Path
-        LineLimit = code.Limit
         Method = method
         WorkingDir = Some code.WorkDir
     }

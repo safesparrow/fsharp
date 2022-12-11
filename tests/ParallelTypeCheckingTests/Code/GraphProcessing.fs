@@ -13,89 +13,23 @@ type NodeInfo<'Item> =
         Dependants: 'Item[]
     }
 
-type StateMeta<'Item> =
-    {
-        Contributors: 'Item[]
-    }
-
-    static member Empty() = { Contributors = [||] }
-
-type StateWrapper<'Item, 'State> =
-    {
-        Meta: StateMeta<'Item>
-        State: 'State
-    }
-
-type ResultWrapper<'Item, 'Result> = { Item: 'Item; Result: 'Result }
-
-type Node<'Item, 'State, 'Result> =
+type Node<'Item, 'Result> =
     {
         Info: NodeInfo<'Item>
         mutable ProcessedDepsCount: int
-        mutable Result: ('State * 'Result) option
-        mutable InputState: 'State option
+        mutable Result: 'Result option
     }
 
-// TODO Do we need to suppress some error logging if we
-// TODO apply the same partial results multiple times?
-// TODO Maybe we can enable logging only for the final fold
-/// <summary>
-/// Combine results of dependencies needed to type-check a 'higher' node in the graph
-/// </summary>
-/// <param name="deps">Direct dependencies of a node</param>
-/// <param name="transitiveDeps">Transitive dependencies of a node</param>
-/// <param name="folder">A way to fold a single result into existing state</param>
-let combineResults
-    (emptyState: 'State)
-    (deps: Node<'Item, 'State, 'Result>[])
-    (transitiveDeps: Node<'Item, 'State, 'Result>[])
-    (folder: 'State -> 'Result -> 'State)
-    : 'State =
-    match deps with
-    | [||] -> emptyState
-    | _ ->
-        let biggestDep =
-            let sizeMetric node =
-                node.Info.TransitiveDeps.Length
-            deps
-            |> Array.maxBy sizeMetric
-
-        let orFail value =
-            value |> Option.defaultWith (fun () -> failwith "Unexpected lack of result")
-
-        let firstState = biggestDep.Result |> orFail |> fst
-
-        // TODO Potential perf optimisation: Keep transDeps in a HashSet from the start,
-        // avoiding reconstructing the HashSet here
-
-        // Add single-file results of remaining transitive deps one-by-one using folder
-        // Note: Good to preserve order here so that folding happens in file order
-        let included =
-            let set = HashSet(biggestDep.Info.TransitiveDeps)
-            set.Add biggestDep.Info.Item |> ignore
-            set
-
-        let resultsToAdd =
-            transitiveDeps
-            |> Array.filter (fun dep -> included.Contains dep.Info.Item = false)
-            |> Array.distinctBy (fun dep -> dep.Info.Item)
-            |> Array.map (fun dep -> dep.Result |> orFail |> snd)
-
-        let state = Array.fold folder firstState resultsToAdd
-        state
-
-// TODO Could be replaced with a simpler recursive approach with memoised per-item results
-let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality and 'Item: comparison>
+let processGraphSimple<'Item, 'Result when 'Item: equality and 'Item: comparison>
     (graph: Graph<'Item>)
-    (doWork: 'Item -> 'State -> 'Result)
-    (folder: bool -> 'State -> 'Result -> 'FinalFileResult * 'State)
-    (emptyState: 'State)
+    (doWork: IReadOnlyDictionary<'Item, Node<'Item, 'Result>> -> Node<'Item, 'Result> -> 'Result)
     (parallelism: int)
-    : 'FinalFileResult[] * 'State =
+    : 'Result[] // Results in order defined in 'graph'
+    =
     let transitiveDeps = graph |> Graph.transitiveOpt
     let dependants = graph |> Graph.reverse
 
-    let makeNode (item: 'Item) : Node<'Item, StateWrapper<'Item, 'State>, ResultWrapper<'Item, 'Result>> =
+    let makeNode (item: 'Item) : Node<'Item, 'Result> =
         let info =
             let exists = graph.ContainsKey item
 
@@ -104,7 +38,7 @@ let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality a
                 || not (transitiveDeps.ContainsKey item)
                 || not (dependants.ContainsKey item)
             then
-                printfn $"WHAT {item}"
+                printfn $"Unexpected inconsistent state of the graph for item '{item}'"
 
             {
                 Item = item
@@ -117,56 +51,26 @@ let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality a
             Info = info
             Result = None
             ProcessedDepsCount = 0
-            InputState = None
         }
 
-    let nodes = graph.Keys |> Seq.map (fun item -> item, makeNode item) |> readOnlyDict
+    let nodes =
+        graph.Keys
+        |> Seq.map (fun item -> item, makeNode item)
+        |> readOnlyDict
     let lookup item = nodes[item]
     let lookupMany items = items |> Array.map lookup
-
     let leaves =
-        nodes.Values |> Seq.filter (fun n -> n.Info.Deps.Length = 0) |> Seq.toArray
-
-    let emptyState =
-        {
-            Meta = StateMeta.Empty<'Item>()
-            State = emptyState
-        }
-
-    let folder (isFinalFold: bool) { Meta = meta; State = state } { Item = item; Result = result } =
-        let finalFileResult, state = folder isFinalFold state result
-
-        let state =
-            {
-                Meta =
-                    {
-                        Contributors = Array.append meta.Contributors [| item |]
-                    }
-                State = state
-            }
-
-        finalFileResult, state
+        nodes.Values
+        |> Seq.filter (fun n -> n.Info.Deps.Length = 0)
+        |> Seq.toArray
 
     printfn $"Node count: {nodes.Count}"
 
     let work
-        (node: Node<'Item, StateWrapper<'Item, 'State>, ResultWrapper<'Item, 'Result>>)
-        : Node<'Item, StateWrapper<'Item, 'State>, ResultWrapper<'Item, 'Result>>[] =
-        let folder x y = folder false x y |> snd
-        let deps = lookupMany node.Info.Deps
-        let transitiveDeps = lookupMany node.Info.TransitiveDeps
-        let inputState = combineResults emptyState deps transitiveDeps folder
-        node.InputState <- Some inputState
-        let singleRes = doWork node.Info.Item inputState.State
-
-        let singleRes =
-            {
-                Item = node.Info.Item
-                Result = singleRes
-            }
-
-        let state = folder inputState singleRes
-        node.Result <- Some(state, singleRes)
+        (node: Node<'Item, 'Result>)
+        : Node<'Item, 'Result>[] =
+        let singleRes = doWork nodes node
+        node.Result <- Some singleRes
         // Need to double-check that only one dependency schedules this dependant
         let unblocked =
             node.Info.Dependants
@@ -177,18 +81,7 @@ let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality a
                     lock x (fun () ->
                         x.ProcessedDepsCount <- x.ProcessedDepsCount + 1
                         x.ProcessedDepsCount)
-
                 pdc = x.Info.Deps.Length)
-        // printfn $"State after {node.Info.Item}"
-        // nodes
-        // |> Seq.map (fun (KeyValue(_, v)) ->
-        //     let x = v.Info.Deps.Length - v.ProcessedDepsCount
-        //     $"{v.Info.Item} - {x} deps left"
-        // )
-        // |> Seq.iter (fun x -> printfn $"{x}")
-        // let c = cnt
-        // cnt <- cnt+1
-        // printfn $"Finished processing node. {unblocked.Length} nodes unblocked"
         unblocked
 
     use cts = new CancellationTokenSource()
@@ -201,15 +94,9 @@ let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality a
         cts.Token
         (fun x -> x.Info.Item.ToString())
 
-    let nodesArray = nodes.Values |> Seq.toArray
-
-    let finals, { State = state }: 'FinalFileResult[] * StateWrapper<'Item, 'State> =
-        nodesArray
-        |> Array.sortBy (fun node -> node.Info.Item)
-        |> Array.fold
-            (fun (fileResults, state) node ->
-                let fileResult, state = folder true state (node.Result.Value |> snd)
-                Array.append fileResults [| fileResult |], state)
-            ([||], emptyState)
-
-    finals, state
+    nodes.Values
+    |> Seq.map (fun node ->
+        node.Result
+        |> Option.defaultWith (fun () -> failwith $"Unexpected lack of result for item '{node.Info.Item}'")
+    )
+    |> Seq.toArray
