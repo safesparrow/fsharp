@@ -58,7 +58,7 @@ let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality a
     (doWork: 'Item -> 'State -> 'Result)
     (folder: bool -> 'State -> 'Result -> 'FinalFileResult * 'State)
     (emptyState: 'State)
-    (parallelism: int)
+    (_parallelism: int)
     : 'FinalFileResult[] * 'State =
 
     let work
@@ -79,7 +79,6 @@ let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality a
         processGraphSimple
             graph
             work
-            parallelism
 
     let finals, state: 'FinalFileResult[] * 'State =
         results
