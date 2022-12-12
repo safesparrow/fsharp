@@ -67,7 +67,7 @@ let internal TestCompilerFromArgs (config: Args) : unit =
 
     try
         let args = setupParsed config
-        let exit: int = CommandLineMain.mainAux (args, true, Some exiter)
+        let exit: int = CommandLineMain.mainAux (args, false, Some exiter)
         Assert.That(exit, Is.Zero)
     finally
         Environment.CurrentDirectory <- oldWorkDir
