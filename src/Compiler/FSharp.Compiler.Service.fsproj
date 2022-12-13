@@ -89,118 +89,12 @@
       <Link>FSStrings.resx</Link>
       <LogicalName>FSStrings.resources</LogicalName>
     </EmbeddedResource>
-    <Compile Include="Utilities\sformat.fsi" />
-    <Compile Include="Utilities\sformat.fs" />
-    <Compile Include="Utilities\sr.fsi" />
-    <Compile Include="Utilities\sr.fs" />
-    <Compile Include="Utilities\ResizeArray.fsi" />
-    <Compile Include="Utilities\ResizeArray.fs" />
-    <Compile Include="Utilities\HashMultiMap.fsi" />
-    <Compile Include="Utilities\HashMultiMap.fs" />
-    <Compile Include="Utilities\EditDistance.fsi" />
-    <Compile Include="Utilities\EditDistance.fs" />
-    <Compile Include="Utilities\TaggedCollections.fsi" />
-    <Compile Include="Utilities\TaggedCollections.fs" />
-    <Compile Include="Utilities\illib.fsi" />
-    <Compile Include="Utilities\illib.fs" />
-    <Compile Include="Utilities\FileSystem.fsi" />
-    <Compile Include="Utilities\FileSystem.fs" />
-    <Compile Include="Utilities\ildiag.fsi" />
-    <Compile Include="Utilities\ildiag.fs" />
-    <Compile Include="Utilities\zmap.fsi" />
-    <Compile Include="Utilities\zmap.fs" />
-    <Compile Include="Utilities\zset.fsi" />
-    <Compile Include="Utilities\zset.fs" />
-    <Compile Include="Utilities\XmlAdapters.fsi" />
-    <Compile Include="Utilities\XmlAdapters.fs" />
-    <Compile Include="Utilities\InternalCollections.fsi" />
-    <Compile Include="Utilities\InternalCollections.fs" />
-    <Compile Include="Utilities\QueueList.fsi" />
-    <Compile Include="Utilities\QueueList.fs" />
-    <Compile Include="Utilities\lib.fsi" />
-    <Compile Include="Utilities\lib.fs" />
-    <Compile Include="Utilities\ImmutableArray.fsi" />
-    <Compile Include="Utilities\ImmutableArray.fs" />
-    <Compile Include="Utilities\rational.fsi" />
-    <Compile Include="Utilities\rational.fs" />
-    <Compile Include="Utilities\PathMap.fsi" />
-    <Compile Include="Utilities\PathMap.fs" />
-    <Compile Include="Utilities\RidHelpers.fs" />
-    <Compile Include="Utilities\range.fsi" />
-    <Compile Include="Utilities\range.fs" />
-    <EmbeddedText Include="Facilities\UtilsStrings.txt" />
-    <Compile Include="Facilities\Logger.fsi" />
-    <Compile Include="Facilities\Logger.fs" />
-    <Compile Include="Facilities\LanguageFeatures.fsi" />
-    <Compile Include="Facilities\LanguageFeatures.fs" />
-    <Compile Include="Facilities\DiagnosticOptions.fsi" />
-    <Compile Include="Facilities\DiagnosticOptions.fs" />
-    <Compile Include="Facilities\TextLayoutRender.fsi" />
-    <Compile Include="Facilities\TextLayoutRender.fs" />
-    <Compile Include="Facilities\DiagnosticsLogger.fsi" />
-    <Compile Include="Facilities\DiagnosticsLogger.fs" />
-    <Compile Include="Facilities\DiagnosticResolutionHints.fsi" />
-    <Compile Include="Facilities\DiagnosticResolutionHints.fs" />
-    <Compile Include="Facilities\prim-lexing.fsi" />
-    <Compile Include="Facilities\prim-lexing.fs" />
-    <Compile Include="Facilities\prim-parsing.fsi" />
-    <Compile Include="Facilities\prim-parsing.fs" />
-    <Compile Include="Facilities\ReferenceResolver.fsi" />
-    <Compile Include="Facilities\ReferenceResolver.fs" />
-    <Compile Include="Facilities\SimulatedMSBuildReferenceResolver.fsi" />
-    <Compile Include="Facilities\SimulatedMSBuildReferenceResolver.fs" />
-    <Compile Include="Facilities\CompilerLocation.fsi" />
-    <Compile Include="Facilities\CompilerLocation.fs" />
-    <Compile Include="Facilities\BuildGraph.fsi" />
-    <Compile Include="Facilities\BuildGraph.fs" />
-    <FsLex Include="AbstractIL\illex.fsl">
-      <OtherFlags>--unicode --lexlib Internal.Utilities.Text.Lexing</OtherFlags>
-      <Link>AbstractIL\illex.fsl</Link>
-    </FsLex>
-    <None Include="AbstractIL\illex.fsl">
-      <Link>AbstractIL\illex.fsl</Link>
-    </None>
-    <FsYacc Include="AbstractIL\ilpars.fsy">
-      <OtherFlags>--module FSharp.Compiler.AbstractIL.AsciiParser --open FSharp.Compiler.AbstractIL --internal --lexlib Internal.Utilities.Text.Lexing --parslib Internal.Utilities.Text.Parsing</OtherFlags>
-      <Link>AbstractIL\ilpars.fsy</Link>
-    </FsYacc>
-    <None Include="AbstractIL\ilpars.fsy">
-      <Link>AbstractIL\FsYacc\ilpars.fsy</Link>
-    </None>
-    <Compile Include="AbstractIL\il.fsi" />
-    <Compile Include="AbstractIL\il.fs" />
-    <Compile Include="AbstractIL\ilx.fsi" />
-    <Compile Include="AbstractIL\ilx.fs" />
-    <Compile Include="AbstractIL\ilascii.fsi" />
-    <Compile Include="AbstractIL\ilascii.fs" />
     <Compile Include="$(FsYaccOutputFolder)ilpars.fs">
       <Link>AbstractIL\FsYaccOut\ilpars.fs</Link>
     </Compile>
     <Compile Include="$(FsLexOutputFolder)illex.fs">
       <Link>AbstractIL\FsLexOut\illex.fs</Link>
     </Compile>
-    <Compile Include="AbstractIL\ilprint.fsi" />
-    <Compile Include="AbstractIL\ilprint.fs" />
-    <Compile Include="AbstractIL\ilmorph.fsi" />
-    <Compile Include="AbstractIL\ilmorph.fs" />
-    <Compile Include="AbstractIL\ilsign.fsi" />
-    <Compile Include="AbstractIL\ilsign.fs" />
-    <Compile Include="AbstractIL\ilnativeres.fsi" />
-    <Compile Include="AbstractIL\ilnativeres.fs" />
-    <Compile Include="AbstractIL\ilsupp.fsi" />
-    <Compile Include="AbstractIL\ilsupp.fs" />
-    <Compile Include="AbstractIL\ilbinary.fsi" />
-    <Compile Include="AbstractIL\ilbinary.fs" />
-    <Compile Include="AbstractIL\ilread.fsi" />
-    <Compile Include="AbstractIL\ilread.fs" />
-    <Compile Include="AbstractIL\ilwritepdb.fsi" />
-    <Compile Include="AbstractIL\ilwritepdb.fs" />
-    <Compile Include="AbstractIL\ilwrite.fsi" />
-    <Compile Include="AbstractIL\ilwrite.fs" />
-    <Compile Include="AbstractIL\ilreflect.fsi" />
-    <Compile Include="AbstractIL\ilreflect.fs" />
-    <Compile Include="SyntaxTree\PrettyNaming.fsi" />
-    <Compile Include="SyntaxTree\PrettyNaming.fs" />
     <FsLex Include="pplex.fsl">
       <OtherFlags>--unicode --lexlib Internal.Utilities.Text.Lexing</OtherFlags>
       <Link>SyntaxTree\pplex.fsl</Link>
@@ -229,29 +123,11 @@
     <None Include="pars.fsy">
       <Link>SyntaxTree\FsYacc\pars.fsy</Link>
     </None>
-    <Compile Include="SyntaxTree\UnicodeLexing.fsi" />
-    <Compile Include="SyntaxTree\UnicodeLexing.fs" />
-    <Compile Include="SyntaxTree\XmlDoc.fsi" />
-    <Compile Include="SyntaxTree\XmlDoc.fs" />
-    <Compile Include="SyntaxTree\SyntaxTrivia.fsi" />
-    <Compile Include="SyntaxTree\SyntaxTrivia.fs" />
-    <Compile Include="SyntaxTree\SyntaxTree.fsi" />
-    <Compile Include="SyntaxTree\SyntaxTree.fs" />
-    <Compile Include="SyntaxTree\SyntaxTreeOps.fsi" />
-    <Compile Include="SyntaxTree\SyntaxTreeOps.fs" />
-    <Compile Include="SyntaxTree\ParseHelpers.fsi" />
-    <Compile Include="SyntaxTree\ParseHelpers.fs" />
     <Compile Include="$(FsYaccOutputFolder)pppars.fs">
       <Link>SyntaxTree\FsYaccOutput\pppars.fs</Link>
     </Compile>
     <Compile Include="$(FsYaccOutputFolder)pars.fs">
       <Link>SyntaxTree\FsYaccOutput\pars.fs</Link>
-    </Compile>
-    <Compile Include="SyntaxTree\LexHelpers.fsi">
-      <Link>SyntaxTree\LexHelpers.fsi</Link>
-    </Compile>
-    <Compile Include="SyntaxTree\LexHelpers.fs">
-      <Link>SyntaxTree\LexHelpers.fs</Link>
     </Compile>
     <Compile Include="$(FsYaccOutputFolder)pplex.fs">
       <Link>SyntaxTree\FsLexOutput\pplex.fs</Link>
@@ -259,37 +135,6 @@
     <Compile Include="$(FsYaccOutputFolder)\lex.fs">
       <Link>SyntaxTree\FsLexOutput\lex.fs</Link>
     </Compile>
-    <Compile Include="SyntaxTree\LexFilter.fsi" />
-    <Compile Include="SyntaxTree\LexFilter.fs" />
-    <Compile Include="TypedTree\tainted.fsi" />
-    <Compile Include="TypedTree\tainted.fs" />
-    <Compile Include="TypedTree\TypeProviders.fsi" />
-    <Compile Include="TypedTree\TypeProviders.fs" />
-    <Compile Include="TypedTree\QuotationPickler.fsi" />
-    <Compile Include="TypedTree\QuotationPickler.fs" />
-    <Compile Include="TypedTree\CompilerGlobalState.fsi" />
-    <Compile Include="TypedTree\CompilerGlobalState.fs" />
-    <Compile Include="TypedTree\TypedTree.fsi" />
-    <Compile Include="TypedTree\TypedTree.fs" />
-    <Compile Include="TypedTree\TypedTreeBasics.fsi" />
-    <Compile Include="TypedTree\TypedTreeBasics.fs" />
-    <Compile Include="TypedTree\TcGlobals.fs" />
-    <Compile Include="TypedTree\TypedTreeOps.fsi" />
-    <Compile Include="TypedTree\TypedTreeOps.fs" />
-    <Compile Include="TypedTree\TypedTreePickle.fsi" />
-    <Compile Include="TypedTree\TypedTreePickle.fs" />
-    <Compile Include="Checking\import.fsi" />
-    <Compile Include="Checking\import.fs" />
-    <Compile Include="Checking\TypeHierarchy.fsi" />
-    <Compile Include="Checking\TypeHierarchy.fs" />
-    <Compile Include="Checking\infos.fsi" />
-    <Compile Include="Checking\infos.fs" />
-    <Compile Include="Checking\AccessibilityLogic.fsi" />
-    <Compile Include="Checking\AccessibilityLogic.fs" />
-    <Compile Include="Checking\AttributeChecking.fsi" />
-    <Compile Include="Checking\AttributeChecking.fs" />
-    <Compile Include="Checking\TypeRelations.fsi" />
-    <Compile Include="Checking\TypeRelations.fs" />
     <Compile Include="Checking\InfoReader.fsi" />
     <Compile Include="Checking\InfoReader.fs" />
     <Compile Include="DependencyManager/AssemblyResolveHandler.fsi">
