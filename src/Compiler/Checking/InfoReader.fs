@@ -1,12 +1,11 @@
 module internal FSharp.Compiler.InfoReader
 
-open FSharp.Compiler.Import
-open FSharp.Compiler.Infos
-open FSharp.Compiler.TcGlobals
-open FSharp.Compiler.Text
+type TcGlobals = int
+type ImportMap = int
+type MethInfo = int
+type PropInfo = int
+type range = int
 
-/// An InfoReader is an object to help us read and cache infos. 
-/// We create one of these for each file we typecheck. 
 type InfoReader(_g: TcGlobals, _amap: ImportMap) as this =
 
     static member ExcludeHiddenOfMethInfos
