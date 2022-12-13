@@ -13,13 +13,17 @@
     <ExcludeFromSourceBuild>true</ExcludeFromSourceBuild>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <OtherFlags>$(OtherFlags) --warnon:1182</OtherFlags>
+    <OtherFlags>$(OtherFlags) d --warnon:1182 --times --test:partiallyParallelOptimization</OtherFlags>
     <NoWarn>$(NoWarn);FS0988</NoWarn> <!-- "program does nothing" warning -->
     <DefineConstants Condition="'$(Configuration)'=='release'">$(DefineConstants);RELEASE</DefineConstants>
     <DefineConstants Condition="'$(Configuration)'=='debug'">$(DefineConstants);DEBUG</DefineConstants>
     <!-- allow testing of static methods in interfaces on .NET 6  -->
     <EnablePreviewFeatures>true</EnablePreviewFeatures>
-    <!-- allow testing of static methods in interfaces on .NET 6  -->
+    <!-- allow testing of static methods in interfaces on .NET 6   -->
+    <DotnetFscCompilerPath>C:/projekty/fsharp/opt/artifacts/bin/fsc/Release/net7.0/fsc.dll</DotnetFscCompilerPath>
+    <Fsc_DotNET_DotnetFscCompilerPath>C:/projekty/fsharp/opt/artifacts/bin/fsc/Release/net7.0/fsc.dll</Fsc_DotNET_DotnetFscCompilerPath>
+    <FSharpPreferNetFrameworkTools>False</FSharpPreferNetFrameworkTools>
+    <FSharpPrefer64BitTools>True</FSharpPrefer64BitTools>
   
 </PropertyGroup>
 
