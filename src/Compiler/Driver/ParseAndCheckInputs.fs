@@ -1479,7 +1479,8 @@ let CheckOneInputAux'
                 // printfn $"Finished Processing Sig {file.FileName}"
                 return
                     fun isFinalFold tcState ->
-                        // printfn $"Applying Sig {file.FileName}"
+                        printfn $"Applying Sig {file.FileName} (final: {isFinalFold})"
+
                         let fsiPartialResult, tcState =
                             let rootSigs = Zmap.add qualNameOfFile sigFileType tcState.tcsRootSigs
 
@@ -1504,6 +1505,9 @@ let CheckOneInputAux'
                         if isFinalFold then
                             fsiPartialResult, tcState
                         else
+                            // Train of thought: I'm not sure you want to add the results to the tcState,
+                            // when this function is called right before it will check the implementation file.
+
                             // Update the TcEnv of implementation files to also contain the signature data.
                             let _ccuSigForFile, tcState =
                                 AddCheckResultsToTcState

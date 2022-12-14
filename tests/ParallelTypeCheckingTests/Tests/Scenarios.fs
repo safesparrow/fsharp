@@ -549,4 +549,32 @@ let fn (a: A) = ()
 """
                     (set [| 0 |])
             ]
+        scenario
+            "Implementation uses something defined above and in signature"
+            [
+                sourceFile
+                    "A.fsi"
+                    """
+module Bar
+
+type Bar =
+    new: unit -> Bar
+    static member Foo: unit -> unit
+
+val Foo: unit -> unit
+"""
+                    Set.empty
+                sourceFile
+                    "B.fs"
+                    """
+module Barry
+
+type Barry() =
+    static member Foo () : unit =
+        failwith ""
+
+let Foo () : unit = 
+    Barry.Foo ()
+"""
+                    (set [| 0 |])
     ]
