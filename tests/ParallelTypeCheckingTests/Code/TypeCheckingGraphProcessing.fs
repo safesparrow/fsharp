@@ -1,6 +1,7 @@
 ﻿/// Parallel processing of graph of work items with dependencies
 module ParallelTypeCheckingTests.TypeCheckingGraphProcessing
 
+open System.IO
 open ParallelTypeCheckingTests.GraphProcessing
 open System.Collections.Generic
 open System.Threading
@@ -14,31 +15,29 @@ open System.Threading
 /// <param name="deps">Direct dependencies of a node</param>
 /// <param name="transitiveDeps">Transitive dependencies of a node</param>
 /// <param name="folder">A way to fold a single result into existing state</param>
+/// <remarks>
+/// Similar to 'processFileGraph', this function is generic yet specific to the type-checking process.
+/// </remarks>
 let private combineResults
     (emptyState: 'State)
-    (deps: Node<'Item, 'State * 'Result>[])
-    (transitiveDeps: Node<'Item, 'State * 'Result>[])
+    (deps: ProcessedNode<'Item, 'State * 'Result>[])
+    (transitiveDeps: ProcessedNode<'Item, 'State * 'Result>[])
     (folder: 'State -> 'Result -> 'State)
     : 'State =
     match deps with
     | [||] -> emptyState
     | _ ->
         let biggestDep =
-            let sizeMetric (node: Node<_,_>) =
+            let sizeMetric (node: ProcessedNode<_,_>) =
                 node.Info.TransitiveDeps.Length
             deps
             |> Array.maxBy sizeMetric
 
-        let orFail value =
-            value |> Option.defaultWith (fun () -> failwith "Unexpected lack of result")
-
-        let firstState = biggestDep.Result |> orFail |> fst
-
-        // TODO Potential perf optimisation: Keep transDeps in a HashSet from the start,
-        // avoiding reconstructing the HashSet here
+        let firstState = biggestDep.Result |> fst
 
         // Add single-file results of remaining transitive deps one-by-one using folder
-        // Note: Good to preserve order here so that folding happens in file order
+        // Note: Ordering is not preserved due to reusing results of the biggest child
+        // rather than starting with empty state
         let included =
             let set = HashSet(biggestDep.Info.TransitiveDeps)
             set.Add biggestDep.Info.Item |> ignore
@@ -48,44 +47,41 @@ let private combineResults
             transitiveDeps
             |> Array.filter (fun dep -> included.Contains dep.Info.Item = false)
             |> Array.distinctBy (fun dep -> dep.Info.Item)
-            |> Array.map (fun dep -> dep.Result |> orFail |> snd)
+            |> Array.map (fun dep -> dep.Result |> snd)
 
         let state = Array.fold folder firstState resultsToAdd
         state
 
-let processGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality and 'Item: comparison>
+// TODO This function and its parameters are quite specific to type-checking despite using generic types.
+// Perhaps we should make it either more specific and remove type parameters, or more generic. 
+let processFileGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality and 'Item: comparison>
     (graph: Graph<'Item>)
     (doWork: 'Item -> 'State -> 'Result)
     (folder: bool -> 'State -> 'Result -> 'FinalFileResult * 'State)
     (emptyState: 'State)
-    (_parallelism: int)
-    : 'FinalFileResult[] * 'State =
+    (ct: CancellationToken)
+    : ('Item * 'FinalFileResult)[] * 'State =
 
     let work
-        (dict: IReadOnlyDictionary<'Item, Node<'Item, 'State * 'Result>>)
-        (node: Node<'Item, 'State * 'Result>)
+        (getFinishedNode: 'Item -> ProcessedNode<'Item, 'State * 'Result>)
+        (node: NodeInfo<'Item>)
         : 'State * 'Result =
         let folder x y = folder false x y |> snd
-        let deps = node.Info.Deps |> Array.map (fun node -> dict[node])
-        let transitiveDeps = node.Info.TransitiveDeps |> Array.map (fun node -> dict[node])
+        let deps = node.Deps |> Array.except [|node.Item|] |> Array.map getFinishedNode
+        let transitiveDeps = node.TransitiveDeps|> Array.except [|node.Item|] |> Array.map getFinishedNode
         let inputState = combineResults emptyState deps transitiveDeps folder
-        let singleRes = doWork node.Info.Item inputState
+        let singleRes = doWork node.Item inputState
         let state = folder inputState singleRes
         state, singleRes
 
-    use cts = new CancellationTokenSource()
+    let results = processGraph graph work ct
 
-    let results =
-        processGraphSimple
-            graph
-            work
-
-    let finals, state: 'FinalFileResult[] * 'State =
+    let finals, state: ('Item * 'FinalFileResult)[] * 'State =
         results
         |> Array.fold
-            (fun (fileResults, state) (_, itemRes) ->
+            (fun (fileResults, state) (item, (_, itemRes)) ->
                 let fileResult, state = folder true state itemRes
-                Array.append fileResults [| fileResult |], state)
+                Array.append fileResults [| item, fileResult |], state)
             ([||], emptyState)
 
     finals, state

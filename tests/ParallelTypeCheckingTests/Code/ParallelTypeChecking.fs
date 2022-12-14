@@ -42,6 +42,8 @@ let folder (isFinalFold: bool) (state: State) (result: SingleResult) : FinalFile
 let CheckMultipleInputsInParallel
     ((ctok, checkForErrors, tcConfig: TcConfig, tcImports: TcImports, tcGlobals, prefixPathOpt, tcState, eagerFormat, inputs): 'a * (unit -> bool) * TcConfig * TcImports * TcGlobals * LongIdent option * TcState * (PhasedDiagnostic -> PhasedDiagnostic) * ParsedInput list)
     : FinalFileResult list * TcState =
+        
+    use cts = new CancellationTokenSource()
 
     let sourceFiles: FileWithAST array =
         inputs
@@ -140,11 +142,17 @@ let CheckMultipleInputsInParallel
         let state: State = tcState, priorErrors
 
         let partialResults, (tcState, _) =
-            TypeCheckingGraphProcessing.processGraph<int, State, SingleResult, FinalFileResult>
+            TypeCheckingGraphProcessing.processFileGraph<int, State, SingleResult, FinalFileResult>
                 graph
                 processFile
                 folder
                 state
-                10
+                cts.Token
 
-        partialResults |> Array.toList, tcState)
+        let partialResults =
+            partialResults
+            |> Array.sortBy fst
+            |> Array.map snd
+            |> Array.toList
+        
+        partialResults, tcState)
