@@ -565,16 +565,17 @@ val Foo: unit -> unit
 """
                     Set.empty
                 sourceFile
-                    "B.fs"
+                    "A.fs"
                     """
-module Barry
+module Bar
 
-type Barry() =
+type Bar() =
     static member Foo () : unit =
         failwith ""
 
 let Foo () : unit = 
-    Barry.Foo ()
+    Bar.Foo ()
 """
                     (set [| 0 |])
+            ]
     ]
