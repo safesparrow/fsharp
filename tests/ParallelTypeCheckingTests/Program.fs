@@ -23,8 +23,7 @@ let parse (argv: string[]) : Args =
 
 [<EntryPoint>]
 let main argv =
-    FSharp.Compiler.ParseAndCheckInputs.CheckMultipleInputsUsingGraphMode <-
-        ParallelTypeChecking.CheckMultipleInputsInParallel
+    FSharp.Compiler.ParseAndCheckInputs.CheckMultipleInputsUsingGraphMode <- ParallelTypeChecking.CheckMultipleInputsInParallel
     let args = parse argv
     TestCompilationFromCmdlineArgs.TestCompilerFromArgs args
     0

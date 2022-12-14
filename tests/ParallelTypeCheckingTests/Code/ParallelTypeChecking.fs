@@ -2,9 +2,6 @@
 
 #nowarn "1182"
 
-open System
-open System.Collections.Concurrent
-open System.Collections.Generic
 open System.IO
 open System.Threading
 open FSharp.Compiler
@@ -18,7 +15,6 @@ open FSharp.Compiler.ParseAndCheckInputs
 open ParallelTypeCheckingTests
 open FSharp.Compiler.Syntax
 open FSharp.Compiler.TcGlobals
-open FSharp.Compiler.Text
 open FSharp.Compiler.TypedTree
 open Internal.Utilities.Library
 open Internal.Utilities.Library.Extras
@@ -42,7 +38,7 @@ let folder (isFinalFold: bool) (state: State) (result: SingleResult) : FinalFile
 let CheckMultipleInputsInParallel
     ((ctok, checkForErrors, tcConfig: TcConfig, tcImports: TcImports, tcGlobals, prefixPathOpt, tcState, eagerFormat, inputs): 'a * (unit -> bool) * TcConfig * TcImports * TcGlobals * LongIdent option * TcState * (PhasedDiagnostic -> PhasedDiagnostic) * ParsedInput list)
     : FinalFileResult list * TcState =
-        
+
     use cts = new CancellationTokenSource()
 
     let sourceFiles: FileWithAST array =
@@ -70,7 +66,7 @@ let CheckMultipleInputsInParallel
     // |> Graph.map (fun idx -> sourceFiles.[idx].File)
     // |> Graph.serialiseToJson graphDumpPath
 
-    let _ = ctok // TODO Use
+    let _ = ctok // TODO Use it
     let diagnosticsLogger = DiagnosticsThreadStatics.DiagnosticsLogger
 
     // In the first linear part of parallel checking, we use a 'checkForErrors' that checks either for errors
@@ -85,12 +81,10 @@ let CheckMultipleInputsInParallel
         : bool -> State -> PartialResult * State =
         cancellable {
             use _ = UseDiagnosticsLogger logger
-            // printfn $"Processing AST {file.ToString()}"
-            // Is it OK that we don't update 'priorErrors' after processing batches?
+            // TODO Is it OK that we don't update 'priorErrors' after processing batches?
             let checkForErrors2 () = priorErrors || (logger.ErrorCount > 0)
 
             let tcSink = TcResultsSink.NoSink
-            // let c = cnt
             cnt <- cnt + 1
 
             // printfn $"#{c} [thread {Thread.CurrentThread.ManagedThreadId}] Type-checking {input.FileName}"
@@ -135,24 +129,15 @@ let CheckMultipleInputsInParallel
                 input, logger)
 
         let processFile (fileIdx: int) (state: State) : bool -> State -> PartialResult * State =
-            let parsedInput, logger = inputsWithLoggers.[fileIdx]
+            let parsedInput, logger = inputsWithLoggers[fileIdx]
             processFile (parsedInput, logger) state
 
-        let _qnof = QualifiedNameOfFile.QualifiedNameOfFile(Ident("", Range.Zero))
         let state: State = tcState, priorErrors
 
         let partialResults, (tcState, _) =
-            TypeCheckingGraphProcessing.processFileGraph<int, State, SingleResult, FinalFileResult>
-                graph
-                processFile
-                folder
-                state
-                cts.Token
+            TypeCheckingGraphProcessing.processFileGraph<int, State, SingleResult, FinalFileResult> graph processFile folder state cts.Token
 
         let partialResults =
-            partialResults
-            |> Array.sortBy fst
-            |> Array.map snd
-            |> Array.toList
-        
+            partialResults |> Array.sortBy fst |> Array.map snd |> Array.toList
+
         partialResults, tcState)

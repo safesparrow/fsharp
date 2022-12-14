@@ -1,7 +1,6 @@
 ﻿/// Parallel processing of graph of work items with dependencies
 module ParallelTypeCheckingTests.TypeCheckingGraphProcessing
 
-open System.IO
 open ParallelTypeCheckingTests.GraphProcessing
 open System.Collections.Generic
 open System.Threading
@@ -28,10 +27,8 @@ let private combineResults
     | [||] -> emptyState
     | _ ->
         let biggestDep =
-            let sizeMetric (node: ProcessedNode<_,_>) =
-                node.Info.TransitiveDeps.Length
-            deps
-            |> Array.maxBy sizeMetric
+            let sizeMetric (node: ProcessedNode<_, _>) = node.Info.TransitiveDeps.Length
+            deps |> Array.maxBy sizeMetric
 
         let firstState = biggestDep.Result |> fst
 
@@ -53,28 +50,34 @@ let private combineResults
         state
 
 // TODO This function and its parameters are quite specific to type-checking despite using generic types.
-// Perhaps we should make it either more specific and remove type parameters, or more generic. 
+// Perhaps we should make it either more specific and remove type parameters, or more generic.
+/// <summary>
+/// Process a graph of items.
+/// A version of 'GraphProcessing.processGraph' specific to type-checking.
+/// </summary>
 let processFileGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality and 'Item: comparison>
     (graph: Graph<'Item>)
-    (doWork: 'Item -> 'State -> 'Result)
+    (work: 'Item -> 'State -> 'Result)
     (folder: bool -> 'State -> 'Result -> 'FinalFileResult * 'State)
     (emptyState: 'State)
     (ct: CancellationToken)
     : ('Item * 'FinalFileResult)[] * 'State =
 
-    let work
-        (getFinishedNode: 'Item -> ProcessedNode<'Item, 'State * 'Result>)
-        (node: NodeInfo<'Item>)
-        : 'State * 'Result =
+    let workWrapper (getProcessedNode: 'Item -> ProcessedNode<'Item, 'State * 'Result>) (node: NodeInfo<'Item>) : 'State * 'Result =
         let folder x y = folder false x y |> snd
-        let deps = node.Deps |> Array.except [|node.Item|] |> Array.map getFinishedNode
-        let transitiveDeps = node.TransitiveDeps|> Array.except [|node.Item|] |> Array.map getFinishedNode
+        let deps = node.Deps |> Array.except [| node.Item |] |> Array.map getProcessedNode
+
+        let transitiveDeps =
+            node.TransitiveDeps
+            |> Array.except [| node.Item |]
+            |> Array.map getProcessedNode
+
         let inputState = combineResults emptyState deps transitiveDeps folder
-        let singleRes = doWork node.Item inputState
+        let singleRes = work node.Item inputState
         let state = folder inputState singleRes
         state, singleRes
 
-    let results = processGraph graph work ct
+    let results = processGraph graph workWrapper ct
 
     let finals, state: ('Item * 'FinalFileResult)[] * 'State =
         results

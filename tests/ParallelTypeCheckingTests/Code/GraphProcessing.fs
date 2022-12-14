@@ -17,7 +17,7 @@ type private PrivateNode<'Item, 'Result> =
         mutable ProcessedDepsCount: int
         mutable Result: 'Result option
     }
-    
+
 type ProcessedNode<'Item, 'Result> =
     {
         Info: NodeInfo<'Item>
@@ -35,14 +35,13 @@ type ProcessedNode<'Item, 'Result> =
 /// <param name="ct">Cancellation token</param>
 /// <remarks>
 /// An alternative scheduling approach is to schedule N parallel tasks that process items from a BlockingCollection.
-/// My basic tests suggested it's faster, although confirming that would require more detailed testing. 
+/// My basic tests suggested it's faster, although confirming that would require more detailed testing.
 /// </remarks>
 let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
     (graph: Graph<'Item>)
     (work: ('Item -> ProcessedNode<'Item, 'Result>) -> NodeInfo<'Item> -> 'Result)
     (ct: CancellationToken)
-    : ('Item * 'Result)[] // Individual item results
-    =
+    : ('Item * 'Result)[] =
     let transitiveDeps = graph |> Graph.transitiveOpt
     let dependants = graph |> Graph.reverse
 
@@ -70,44 +69,42 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
             ProcessedDepsCount = 0
         }
 
-    let nodes =
-        graph.Keys
-        |> Seq.map (fun item -> item, makeNode item)
-        |> readOnlyDict
-    let lookupMany items = items |> Array.map (fun item -> nodes[item])
+    let nodes = graph.Keys |> Seq.map (fun item -> item, makeNode item) |> readOnlyDict
+
+    let lookupMany items =
+        items |> Array.map (fun item -> nodes[item])
+
     let leaves =
-        nodes.Values
-        |> Seq.filter (fun n -> n.Info.Deps.Length = 0)
-        |> Seq.toArray
+        nodes.Values |> Seq.filter (fun n -> n.Info.Deps.Length = 0) |> Seq.toArray
 
     let waitHandle = new AutoResetEvent(false)
 
     let getItemPublicNode item =
         let node = nodes[item]
+
         {
             ProcessedNode.Info = node.Info
             ProcessedNode.Result =
                 node.Result
                 |> Option.defaultWith (fun () -> failwith $"Results for item '{node.Info.Item}' are not yet available")
         }
-    
+
     let incrementProcessedCount =
         let mutable processedCount = 0
+
         fun () ->
             if Interlocked.Increment(&processedCount) = nodes.Count then
                 waitHandle.Set() |> ignore
-    
+
     let rec queueNode node =
-        Async.Start(async {processNode node}, ct)
-        
-    and processNode
-        (node: PrivateNode<'Item, 'Result>)
-        : unit =
+        Async.Start(async { processNode node }, ct)
+
+    and processNode (node: PrivateNode<'Item, 'Result>) : unit =
         let info = node.Info
-        
+
         let singleRes = work getItemPublicNode info
         node.Result <- Some singleRes
-        
+
         let unblockedDependants =
             node.Info.Dependants
             |> lookupMany
@@ -118,21 +115,21 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
                 let pdc = Interlocked.Increment(&dependant.ProcessedDepsCount)
                 // Note: We cannot read 'dependant.ProcessedDepsCount' again to avoid returning the same item multiple times.
                 pdc = dependant.Info.Deps.Length)
-        
+
         unblockedDependants |> Array.iter queueNode
-        incrementProcessedCount()
-    
+        incrementProcessedCount ()
+
     leaves |> Array.iter queueNode
-    // TODO Handle async exceptions 
+    // TODO Handle async exceptions
     // q.Error += ...
     waitHandle.WaitOne() |> ignore
-    
+
     nodes.Values
     |> Seq.map (fun node ->
         let result =
             node.Result
             |> Option.defaultWith (fun () -> failwith $"Unexpected lack of result for item '{node.Info.Item}'")
-        node.Info.Item, result
-    )
+
+        node.Info.Item, result)
     |> Seq.sortBy fst
     |> Seq.toArray

@@ -8,11 +8,7 @@ open FSharp.Compiler
 open ParallelTypeCheckingTests
 open ParallelTypeCheckingTests.TestUtils
 
-type Codebase =
-    {
-        WorkDir: string
-        Path: string
-    }
+type Codebase = { WorkDir: string; Path: string }
 
 let codebases =
     [|
@@ -35,8 +31,7 @@ let internal setupParsed config =
         config
 
     let args =
-        System.IO.File.ReadAllLines(path |> replacePaths)
-        |> Array.map replacePaths
+        System.IO.File.ReadAllLines(path |> replacePaths) |> Array.map replacePaths
 
     setupCompilationMethod method
 
