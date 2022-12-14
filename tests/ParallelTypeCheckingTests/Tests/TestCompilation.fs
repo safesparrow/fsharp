@@ -194,6 +194,32 @@ let d (c: CType) =
         ]
         |> FProject.Make CompileOutput.Library
 
+    let failingIlGenShadowedStaticMethods =
+        [
+            "Bar.fsi",
+            """
+module Bar
+
+type Bar =
+    new: unit -> Bar
+    static member Foo: unit -> unit
+
+val Foo: unit -> unit
+"""
+            "Bar.fs",
+            """
+module Bar
+
+type Bar() =
+    static member Foo () : unit =
+        failwith ""
+
+let Foo () : unit = 
+    Bar.Foo ()
+"""
+        ]
+        |> FProject.Make CompileOutput.Library
+
     let all =
         [
             encodeDecodeSimple
@@ -201,6 +227,7 @@ let d (c: CType) =
             fsFsi
             emptyNamespace
             dependentSignatures
+            failingIlGenShadowedStaticMethods
         ]
 
 type Case =
