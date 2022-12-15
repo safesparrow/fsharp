@@ -180,7 +180,11 @@ let ``Create Graph from typed tree`` (code: Codebase) =
                     Map.add idx allDeps acc)
 
             let typedTreeMap = collectAllDeps graphFromTypedTree
-            let graphFromHeuristic = files.Values |> Seq.toArray |> DependencyResolution.mkGraph
+
+            let filePairs = files.Values |> Seq.toArray |> FilePairMap
+
+            let graphFromHeuristic =
+                files.Values |> Seq.toArray |> DependencyResolution.mkGraph filePairs
 
             graphFromHeuristic
             |> Graph.map (fun n -> files.[n].File)

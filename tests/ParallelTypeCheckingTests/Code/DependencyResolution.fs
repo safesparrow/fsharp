@@ -177,28 +177,14 @@ let collectGhostDependencies (fileIndex: int) (trie: TrieNode) (queryTrie: Query
                 // The partial open did eventually lead to a link in a file
                 Array.empty)
 
-let mkGraph (files: FileWithAST array) : Graph<int> =
-    // Map to easily retrieve the signature file index
-    let implToSig =
-        Array.choose
-            (fun f ->
-                match f.AST with
-                | ParsedInput.SigFile _ ->
-                    files
-                    |> Array.skip (f.Idx + 1)
-                    |> Array.tryFind (fun (implFile: FileWithAST) -> $"{implFile.File}i" = f.File)
-                    |> Option.map (fun (implFile: FileWithAST) -> (implFile.Idx, f.Idx))
-                | ParsedInput.ImplFile _ -> None)
-            files
-        |> Map.ofArray
-
+let mkGraph (filePairs: FilePairMap) (files: FileWithAST array) : Graph<int> =
     // Implementation files backed by signatures should be excluded to construct the trie.
     let trieInput =
         Array.choose
             (fun f ->
                 match f.AST with
                 | ParsedInput.SigFile _ -> Some f
-                | ParsedInput.ImplFile _ -> if Map.containsKey f.Idx implToSig then None else Some f)
+                | ParsedInput.ImplFile _ -> if filePairs.HasSignature f.Idx then None else Some f)
             files
 
     let trie = TrieMapping.mkTrie trieInput
@@ -221,7 +207,7 @@ let mkGraph (files: FileWithAST array) : Graph<int> =
 
         // Automatically add a link from an implementation to its signature file (if present)
         let signatureDependency =
-            match Map.tryFind file.Idx implToSig with
+            match filePairs.TryGetSignatureIndex file.Idx with
             | None -> Array.empty
             | Some sigIdx -> Array.singleton sigIdx
 

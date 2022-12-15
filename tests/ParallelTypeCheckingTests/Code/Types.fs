@@ -120,3 +120,32 @@ type QueryTrieNodeResult =
     | NodeExposesData of Set<int>
 
 type QueryTrie = ModuleSegment list -> QueryTrieNodeResult
+
+/// Helper class to help map signature files to implementation files and vice versa.
+type FilePairMap(files: FileWithAST array) =
+    let implToSig, sigToImpl =
+        Array.choose
+            (fun f ->
+                match f.AST with
+                | ParsedInput.SigFile _ ->
+                    files
+                    |> Array.skip (f.Idx + 1)
+                    |> Array.tryFind (fun (implFile: FileWithAST) -> $"{implFile.File}i" = f.File)
+                    |> Option.map (fun (implFile: FileWithAST) -> (implFile.Idx, f.Idx))
+                | ParsedInput.ImplFile _ -> None)
+            files
+        |> fun pairs -> Map.ofArray pairs, Map.ofArray (Array.map (fun (a, b) -> (b, a)) pairs)
+
+    member x.GetSignatureIndex(implementationIndex: int) = Map.find implementationIndex implToSig
+    member x.GetImplementationIndex(signatureIndex: int) = Map.find signatureIndex sigToImpl
+
+    member x.HasSignature(implementationIndex: int) =
+        Map.containsKey implementationIndex implToSig
+
+    member x.TryGetSignatureIndex(implementationIndex: int) =
+        if x.HasSignature implementationIndex then
+            Some(x.GetSignatureIndex implementationIndex)
+        else
+            None
+
+    member x.IsSignature(index: int) = Map.containsKey index sigToImpl

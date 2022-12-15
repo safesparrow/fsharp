@@ -185,7 +185,16 @@ val CheckOneInput':
     tcState: TcState *
     input: ParsedInput *
     skipImplIfSigExists: bool ->
-        Cancellable<bool -> TcState -> PartialResult * TcState>
+        Cancellable<TcState -> PartialResult * TcState>
+
+val AddSignatureResultToTcImplEnv:
+    tcImports: TcImports *
+    tcGlobals: TcGlobals *
+    prefixPathOpt: LongIdent option *
+    tcSink: NameResolution.TcResultsSink *
+    tcState: TcState *
+    input: ParsedInput ->
+        (TcState -> PartialResult * TcState)
 
 val CheckMultipleInputsInParallel:
     (CompilationThreadToken * (unit -> bool) * TcConfig * TcImports * TcGlobals * LongIdent option * TcState * (PhasedDiagnostic -> PhasedDiagnostic) * ParsedInput list) ->
