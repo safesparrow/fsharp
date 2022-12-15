@@ -40,6 +40,7 @@ type ProcessedNode<'Item, 'Result> =
 let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
     (graph: Graph<'Item>)
     (work: ('Item -> ProcessedNode<'Item, 'Result>) -> NodeInfo<'Item> -> 'Result)
+    (includeInFinalState: 'Item -> bool)
     (ct: CancellationToken)
     : ('Item * 'Result)[] =
     let transitiveDeps = graph |> Graph.transitiveOpt
@@ -125,6 +126,7 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
     waitHandle.WaitOne() |> ignore
 
     nodes.Values
+    |> Seq.filter (fun node -> includeInFinalState node.Info.Item)
     |> Seq.map (fun node ->
         let result =
             node.Result

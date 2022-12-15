@@ -304,6 +304,20 @@ let ``Compile a valid scenario using graph-based type-checking`` (scenario: Scen
         }
 
 [<TestCaseSource(nameof scenarios)>]
+let ``Compile a valid scenario using parallel backed implementation files type-checking`` (scenario: Scenario) =
+    let project =
+        scenario.Files
+        |> Array.map (fun (f: FileInScenario) -> f.FileWithAST.File, f.Content)
+        |> List.ofArray
+        |> FProject.Make CompileOutput.Library
+
+    compileAValidProject
+        {
+            Method = Method.ParallelCheckingOfBackedImplFiles
+            Project = project
+        }
+
+[<TestCaseSource(nameof scenarios)>]
 let ``Compile a valid scenario using sequential type-checking`` (scenario: Scenario) =
     let project =
         scenario.Files

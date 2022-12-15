@@ -58,13 +58,14 @@ let private combineResults
 let processFileGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equality and 'Item: comparison>
     (graph: Graph<'Item>)
     (work: 'Item -> 'State -> 'Result)
-    (folder: bool -> 'State -> 'Result -> 'FinalFileResult * 'State)
+    (folder: 'State -> 'Result -> 'FinalFileResult * 'State)
+    (includeInFinalState: 'Item -> bool)
     (emptyState: 'State)
     (ct: CancellationToken)
     : ('Item * 'FinalFileResult)[] * 'State =
 
     let workWrapper (getProcessedNode: 'Item -> ProcessedNode<'Item, 'State * 'Result>) (node: NodeInfo<'Item>) : 'State * 'Result =
-        let folder x y = folder false x y |> snd
+        let folder x y = folder x y |> snd
         let deps = node.Deps |> Array.except [| node.Item |] |> Array.map getProcessedNode
 
         let transitiveDeps =
@@ -77,13 +78,13 @@ let processFileGraph<'Item, 'State, 'Result, 'FinalFileResult when 'Item: equali
         let state = folder inputState singleRes
         state, singleRes
 
-    let results = processGraph graph workWrapper ct
+    let results = processGraph graph workWrapper includeInFinalState ct
 
     let finals, state: ('Item * 'FinalFileResult)[] * 'State =
         results
         |> Array.fold
             (fun (fileResults, state) (item, (_, itemRes)) ->
-                let fileResult, state = folder true state itemRes
+                let fileResult, state = folder state itemRes
                 Array.append fileResults [| item, fileResult |], state)
             ([||], emptyState)
 

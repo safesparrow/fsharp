@@ -9,7 +9,9 @@ let scenarios = codebases
 
 [<TestCaseSource(nameof scenarios)>]
 let ``Supported scenario`` (scenario: Scenario) =
-    let graph = mkGraph (Array.map (fun f -> f.FileWithAST) scenario.Files)
+    let files = Array.map (fun f -> f.FileWithAST) scenario.Files
+    let filePairs = FilePairMap(files)
+    let graph = mkGraph filePairs files
 
     for file in scenario.Files do
         let expectedDeps = file.ExpectedDependencies
