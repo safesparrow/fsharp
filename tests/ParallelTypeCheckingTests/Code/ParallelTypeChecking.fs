@@ -35,9 +35,14 @@ type PartialResult = TcEnv * TopAttribs * CheckedImplFile option * ModuleOrNames
 let folder (state: State) (result: SingleResult) : FinalFileResult * State = result state
 
 [<RequireQualifiedAccess>]
-type Dependency =
+type NodeToTypeCheck =
+    /// A real physical file in the current project.
+    /// This can be either an implementation or a signature file.
     | PhysicalFile of fileIndex: int
-    | Pair of signatureFileIndex: int
+    /// An artificial node that will add the earlier processed signature information to the TcEnvFromImpls.
+    /// Dependants on this type of node will perceive that a file is known in both TcEnvFromSignatures and TcEnvFromImpls.
+    /// Even though the actual implementation file was not type-checked.
+    | ArtificialImplFile of signatureFileIndex: int
 
 /// Use parallel checking of implementation files that have signature files
 let CheckMultipleInputsInParallel
@@ -63,28 +68,25 @@ let CheckMultipleInputsInParallel
     // When type checking a file, depending on the type (implementation or signature), it will use one of these typing environments (TcEnv).
     // Checking a file will populate the respective TcEnv.
     //
-    // When a file has a dependencies, the information of the signature file in case a pair (1) will suffice to type-check the file.
-    // Example: if `B.fs` has a dependency on `A`, the information of `A.fsi` is enough for `B.fs` to type-check,
-    // on condition that it is available in the TcEnvFromImpls.
-    // We introduce a special Pair dependency node in the graph to satisfy this. `B.fs -> [ A.fsi ]` becomes `B.fs -> [ Pair<A> ].
-    // The `Pair<A>` node will duplicate the signature information which A.fsi provided.
-    // Processing a Pair will add the information from the TcEnvFromSignatures to the TcEnvFromImpls.
+    // When a file has a dependencies, the information of the signature file in case a pair (implementation file backed by a signature) will suffice to type-check that file.
+    // Example: if `B.fs` has a dependency on `A`, the information of `A.fsi` is enough for `B.fs` to type-check, on condition that information is available in the TcEnvFromImpls.
+    // We introduce a special ArtificialImplFile node in the graph to satisfy this. `B.fs -> [ A.fsi ]` becomes `B.fs -> [ ArtificialImplFile A ].
+    // The `ArtificialImplFile A` node will duplicate the signature information which A.fsi provided earlier.
+    // Processing a `ArtificialImplFile` node will add the information from the TcEnvFromSignatures to the TcEnvFromImpls.
     // This means `A` will be known in both TcEnvs and therefor `B.fs` can be type-checked.
     // By doing this, we can speed up the graph processing as type checking a signature file is less expensive than its implementation counterpart.
     //
-    // When we need to actually type-check the implementation file of a Pair, we cannot have the duplicate information of the signature file present in TcEnvFromImpls.
-    // Example `A.fs -> [ A.fsi ]`, because an implementation file always depends on its signature.
-    // Type-checking `A.fs` will add the actual information to TcEnvFromImpls and we do not depend on the Pair<A> for `A.fs` itself.
+    // When we need to actually type-check an implementation file backed by a signature, we cannot have the duplicate information of the signature file present in TcEnvFromImpls.
+    // Example `A.fs -> [ A.fsi ]`. An implementation file always depends on its signature.
+    // Type-checking `A.fs` will add the actual information to TcEnvFromImpls and we do not depend on the `ArtificialImplFile A` for `A.fs`.
     //
-    // In order to deal correctly with the Pair logic, we need to transform the resolved graph to contain the additional pair nodes.
-    // After we have type-checked the graph, we exclude the Pair nodes as they are not actual physical files in our project.
-    //
-    // (1) : A pair is consider the combination of a implementation and signature file. (For example `A.fsi` and matching `A.fs` is Pair<A>)
-    let dependencyGraph =
-        let mkPair n = Dependency.Pair n
-        let mkPhysicalFile n = Dependency.PhysicalFile n
+    // In order to deal correctly with the `ArtificialImplFile` logic, we need to transform the resolved graph to contain the additional pair nodes.
+    // After we have type-checked the graph, we exclude the ArtificialImplFile nodes as they are not actual physical files in our project.
+    let nodeGraph =
+        let mkArtificialImplFile n = NodeToTypeCheck.ArtificialImplFile n
+        let mkPhysicalFile n = NodeToTypeCheck.PhysicalFile n
 
-        // Map any signature dependencies to the Pair counterparts.
+        // Map any signature dependencies to the ArtificialImplFile counterparts.
         // Unless, the signature dependency is the backing file of the current (implementation) file.
         let mapDependencies idx deps =
             Array.map
@@ -97,21 +99,21 @@ let CheckMultipleInputsInParallel
                             // Keep using the physical file
                             mkPhysicalFile dep
                         else
-                            mkPair dep
+                            mkArtificialImplFile dep
                     else
                         mkPhysicalFile dep)
                 deps
 
-        // Transform the graph to include Pair nodes when necessary.
+        // Transform the graph to include ArtificialImplFile nodes when necessary.
         graph
         |> Seq.collect (fun (KeyValue (fileIdx, deps)) ->
             if filePairs.IsSignature fileIdx then
-                // Add an additional Pair node for the signature file.
+                // Add an additional ArtificialImplFile node for the signature file.
                 [|
                     // Mark the current file as physical and map the dependencies.
                     mkPhysicalFile fileIdx, mapDependencies fileIdx deps
                     // Introduce a new node that depends on the signature.
-                    mkPair fileIdx, [| mkPhysicalFile fileIdx |]
+                    mkArtificialImplFile fileIdx, [| mkPhysicalFile fileIdx |]
                 |]
             else
                 [| mkPhysicalFile fileIdx, mapDependencies fileIdx deps |])
@@ -140,7 +142,7 @@ let CheckMultipleInputsInParallel
 
     let mutable cnt = 1
 
-    let processPair (input: ParsedInput) ((currentTcState, _currentPriorErrors): State) : State -> PartialResult * State =
+    let processArtificialImplFile (input: ParsedInput) ((currentTcState, _currentPriorErrors): State) : State -> PartialResult * State =
         fun (state: State) ->
             let tcState, currentPriorErrors = state
 
@@ -195,25 +197,25 @@ let CheckMultipleInputsInParallel
                 let logger = DiagnosticsLoggerForInput(tcConfig, input, oldLogger)
                 input, logger)
 
-        let processFile (dependency: Dependency) (state: State) : State -> PartialResult * State =
-            match dependency with
-            | Dependency.Pair idx ->
+        let processFile (node: NodeToTypeCheck) (state: State) : State -> PartialResult * State =
+            match node with
+            | NodeToTypeCheck.ArtificialImplFile idx ->
                 let parsedInput, _ = inputsWithLoggers.[idx]
-                processPair parsedInput state
-            | Dependency.PhysicalFile idx ->
+                processArtificialImplFile parsedInput state
+            | NodeToTypeCheck.PhysicalFile idx ->
                 let parsedInput, logger = inputsWithLoggers.[idx]
                 processFile (parsedInput, logger) state
 
         let state: State = tcState, priorErrors
 
         let partialResults, (tcState, _) =
-            TypeCheckingGraphProcessing.processFileGraph<Dependency, State, SingleResult, FinalFileResult>
-                dependencyGraph
+            TypeCheckingGraphProcessing.processFileGraph<NodeToTypeCheck, State, SingleResult, FinalFileResult>
+                nodeGraph
                 processFile
                 folder
                 (function
-                | Dependency.Pair _ -> false
-                | Dependency.PhysicalFile _ -> true)
+                | NodeToTypeCheck.ArtificialImplFile _ -> false
+                | NodeToTypeCheck.PhysicalFile _ -> true)
                 state
                 cts.Token
 
