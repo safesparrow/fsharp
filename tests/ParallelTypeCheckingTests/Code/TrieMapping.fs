@@ -56,7 +56,7 @@ let private doesFileExposeContentToTheRoot (ast: ParsedInput) : bool =
 let mergeTrieNodes (defaultChildSize: int) (tries: TrieNode array) =
     let rec mergeTrieNodesAux (root: TrieNode) (KeyValue (k, v)) =
         if root.Children.ContainsKey k then
-            let node = root.Children.[k]
+            let node = root.Children[k]
 
             match node.Current, v.Current with
             | TrieNodeInfo.Namespace (filesThatExposeTypes = currentFiles), TrieNodeInfo.Namespace (filesThatExposeTypes = otherFiles) ->

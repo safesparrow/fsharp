@@ -8,7 +8,7 @@ open System.Collections.Generic
 open System.IO
 open Newtonsoft.Json
 
-/// <summary> DAG of files </summary>
+/// <summary> Directed Acyclic Graph (DAG) of arbitrary nodes </summary>
 type Graph<'Node> = IReadOnlyDictionary<'Node, 'Node[]>
 
 module Graph =
@@ -48,7 +48,7 @@ module Graph =
         addIfMissing missingNodes graph
 
     /// Create a transitive closure of the graph
-    let transitiveOpt<'Node when 'Node: equality> (graph: Graph<'Node>) : Graph<'Node> =
+    let transitive<'Node when 'Node: equality> (graph: Graph<'Node>) : Graph<'Node> =
         let go (node: 'Node) =
             let visited = HashSet<'Node>()
 
@@ -63,33 +63,13 @@ module Graph =
         |> Array.Parallel.map (fun node -> node, go node)
         |> readOnlyDict
 
-    /// Create a transitive closure of the graph
-    let transitive<'Node when 'Node: equality> (graph: Graph<'Node>) : Graph<'Node> =
-        let rec calcTransitiveEdges =
-            fun (node: 'Node) ->
-                let edgeTargets =
-                    match graph.TryGetValue node with
-                    | true, x -> x
-                    | false, _ -> failwith "FOO"
-
-                edgeTargets
-                |> Array.collect calcTransitiveEdges
-                |> Array.append edgeTargets
-                |> Array.distinct
-            // Dispose of memoisation context
-            |> memoize
-
-        graph.Keys
-        |> Seq.map (fun node -> node, calcTransitiveEdges node)
-        |> readOnlyDict
-
     /// Create a reverse of the graph
     let reverse (originalGraph: Graph<'Node>) : Graph<'Node> =
         originalGraph
         // Collect all edges
         |> Seq.collect (fun (KeyValue (idx, deps)) -> deps |> Array.map (fun dep -> idx, dep))
         // Group dependants of the same dependencies together
-        |> Seq.groupBy (fun (_idx, dep) -> dep)
+        |> Seq.groupBy snd
         // Construct reversed graph
         |> Seq.map (fun (dep, edges) -> dep, edges |> Seq.map fst |> Seq.toArray)
         |> readOnlyDict

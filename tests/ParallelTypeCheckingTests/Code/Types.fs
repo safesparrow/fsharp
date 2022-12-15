@@ -13,7 +13,7 @@ type FileWithAST =
         AST: ParsedInput
     }
 
-/// There is a subtle difference a module and namespace.
+/// There is a subtle difference between a module and namespace.
 /// A namespace does not necessarily expose a set of dependent files.
 /// Only when the namespace exposes types that could later be inferred.
 /// Children of a namespace don't automatically depend on each other for that reason

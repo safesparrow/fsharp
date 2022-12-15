@@ -200,26 +200,32 @@ let CheckMultipleInputsInParallel
         let processFile (node: NodeToTypeCheck) (state: State) : State -> PartialResult * State =
             match node with
             | NodeToTypeCheck.ArtificialImplFile idx ->
-                let parsedInput, _ = inputsWithLoggers.[idx]
+                let parsedInput, _ = inputsWithLoggers[idx]
                 processArtificialImplFile parsedInput state
             | NodeToTypeCheck.PhysicalFile idx ->
-                let parsedInput, logger = inputsWithLoggers.[idx]
+                let parsedInput, logger = inputsWithLoggers[idx]
                 processFile (parsedInput, logger) state
 
         let state: State = tcState, priorErrors
 
+        let finalStateItemChooser node =
+            match node with
+            | NodeToTypeCheck.ArtificialImplFile _ -> None
+            | NodeToTypeCheck.PhysicalFile file -> Some file
+            
         let partialResults, (tcState, _) =
-            TypeCheckingGraphProcessing.processFileGraph<NodeToTypeCheck, State, SingleResult, FinalFileResult>
+            TypeCheckingGraphProcessing.processTypeCheckingGraph<NodeToTypeCheck, int, State, SingleResult, FinalFileResult>
                 nodeGraph
                 processFile
                 folder
-                (function
-                | NodeToTypeCheck.ArtificialImplFile _ -> false
-                | NodeToTypeCheck.PhysicalFile _ -> true)
+                finalStateItemChooser
                 state
                 cts.Token
 
         let partialResults =
-            partialResults |> Array.sortBy fst |> Array.map snd |> Array.toList
+            partialResults
+            // Bring back the original, index-based file order.
+            |> List.sortBy fst
+            |> List.map snd
 
         partialResults, tcState)

@@ -3,6 +3,7 @@ module ParallelTypeCheckingTests.GraphProcessing
 
 open System.Threading
 
+/// Information about the node in a graph, describing its relation with other nodes. 
 type NodeInfo<'Item> =
     {
         Item: 'Item
@@ -11,13 +12,23 @@ type NodeInfo<'Item> =
         Dependants: 'Item[]
     }
 
-type private PrivateNode<'Item, 'Result> =
+type IncrementableInt(value: int) =
+    let mutable value = value
+    with
+        member this.Value = value
+        // Increment the value in a thread-safe manner and return the new value.
+        member this.Increment() =
+            Interlocked.Increment (&value)
+
+type private GraphNode<'Item, 'Result> =
     {
         Info: NodeInfo<'Item>
-        mutable ProcessedDepsCount: int
+        /// Used to determine when all dependencies of this node have been resolved.
+        ProcessedDepsCount: IncrementableInt
         mutable Result: 'Result option
     }
 
+/// An already processed node in the graph, with its result available
 type ProcessedNode<'Item, 'Result> =
     {
         Info: NodeInfo<'Item>
@@ -40,13 +51,12 @@ type ProcessedNode<'Item, 'Result> =
 let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
     (graph: Graph<'Item>)
     (work: ('Item -> ProcessedNode<'Item, 'Result>) -> NodeInfo<'Item> -> 'Result)
-    (includeInFinalState: 'Item -> bool)
     (ct: CancellationToken)
     : ('Item * 'Result)[] =
-    let transitiveDeps = graph |> Graph.transitiveOpt
+    let transitiveDeps = graph |> Graph.transitive
     let dependants = graph |> Graph.reverse
 
-    let makeNode (item: 'Item) : PrivateNode<'Item, 'Result> =
+    let makeNode (item: 'Item) : GraphNode<'Item, 'Result> =
         let info =
             let exists = graph.ContainsKey item
 
@@ -67,7 +77,7 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
         {
             Info = info
             Result = None
-            ProcessedDepsCount = 0
+            ProcessedDepsCount = IncrementableInt(0)
         }
 
     let nodes = graph.Keys |> Seq.map (fun item -> item, makeNode item) |> readOnlyDict
@@ -78,7 +88,7 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
     let leaves =
         nodes.Values |> Seq.filter (fun n -> n.Info.Deps.Length = 0) |> Seq.toArray
 
-    let waitHandle = new AutoResetEvent(false)
+    let waitHandle = new ManualResetEventSlim(false)
 
     let getItemPublicNode item =
         let node = nodes[item]
@@ -90,17 +100,30 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
                 |> Option.defaultWith (fun () -> failwith $"Results for item '{node.Info.Item}' are not yet available")
         }
 
-    let incrementProcessedCount =
-        let mutable processedCount = 0
-
-        fun () ->
-            if Interlocked.Increment(&processedCount) = nodes.Count then
-                waitHandle.Set() |> ignore
+    let processedCount = IncrementableInt(0)
+    let mutable exn : ('Item * System.Exception) option = None
+    let incrementProcessedNodesCount () =
+        if processedCount.Increment() = nodes.Count then
+            waitHandle.Set() |> ignore
 
     let rec queueNode node =
-        Async.Start(async { processNode node }, ct)
+        Async.Start(
+            async {
+                let! res =
+                    async {
+                        processNode node
+                    }
+                    |> Async.Catch
+                match res with
+                | Choice1Of2 () -> ()
+                | Choice2Of2 ex ->
+                    exn <- Some (node.Info.Item, ex)
+                    waitHandle.Set() |> ignore
+            }
+            ,ct)
 
-    and processNode (node: PrivateNode<'Item, 'Result>) : unit =
+    and processNode (node: GraphNode<'Item, 'Result>) : unit =
+        
         let info = node.Info
 
         let singleRes = work getItemPublicNode info
@@ -112,21 +135,22 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
             // For every dependant, increment its number of processed dependencies,
             // and filter dependants which now have all dependencies processed (but didn't before).
             |> Array.filter (fun dependant ->
-                // This counter can be incremented by multiple workers on different threads.
-                let pdc = Interlocked.Increment(&dependant.ProcessedDepsCount)
+                let pdc = dependant.ProcessedDepsCount.Increment()
                 // Note: We cannot read 'dependant.ProcessedDepsCount' again to avoid returning the same item multiple times.
                 pdc = dependant.Info.Deps.Length)
 
         unblockedDependants |> Array.iter queueNode
-        incrementProcessedCount ()
-
+        incrementProcessedNodesCount ()
+        
     leaves |> Array.iter queueNode
-    // TODO Handle async exceptions
-    // q.Error += ...
-    waitHandle.WaitOne() |> ignore
+
+    waitHandle.Wait(ct) |> ignore
+    match exn with
+    | None -> ()
+    | Some (item, ex) ->
+        raise (System.Exception($"Encountered exception when processing item '{item}'", ex))
 
     nodes.Values
-    |> Seq.filter (fun node -> includeInFinalState node.Info.Item)
     |> Seq.map (fun node ->
         let result =
             node.Result

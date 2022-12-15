@@ -2,6 +2,7 @@
 
 open FSharp.Compiler.Syntax
 open FSharp.Compiler.SyntaxTreeOps
+open ParallelTypeCheckingTests
 
 type Continuations = ((FileContentEntry list -> FileContentEntry list) -> FileContentEntry list) list
 

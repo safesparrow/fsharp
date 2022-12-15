@@ -3,9 +3,6 @@
 open FSharp.Compiler.Syntax
 open ParallelTypeCheckingTests
 
-// This is pseudo code of how we could restructure the trie code
-// My main benefit is that you can easily visually inspect if an identifier will match something in the trie
-
 // This code just looks for a path in the trie
 // It could be cached and is easy to reason about.
 let queryTrie (trie: TrieNode) (path: ModuleSegment list) : QueryTrieNodeResult =
@@ -58,7 +55,7 @@ let processIdentifier (queryTrie: QueryTrie) (path: ModuleSegment list) (state: 
     match queryResult with
     | QueryTrieNodeResult.NodeDoesNotExist -> state
     | QueryTrieNodeResult.NodeDoesNotExposeData ->
-        // This can occur when you are have a file that uses a known namespace (for example namespace System).
+        // This can occur when you have a file that uses a known namespace (for example namespace System).
         // When any other code uses that System namespace it won't find anything in the user code.
         state
     | QueryTrieNodeResult.NodeExposesData files -> state.AddDependencies files
@@ -114,17 +111,10 @@ let rec processStateEntry (queryTrie: QueryTrie) (state: FileContentQueryState) 
         }
 
 let getFileNameBefore (files: FileWithAST array) idx =
-    files.[0 .. (idx - 1)] |> Array.map (fun f -> f.Idx) |> Set.ofArray
+    files[0 .. (idx - 1)] |> Array.map (fun f -> f.Idx) |> Set.ofArray
 
-let time msg f a =
-    let sw = System.Diagnostics.Stopwatch.StartNew()
-    let result = f a
-    sw.Stop()
-    printfn $"{msg} took %A{sw.Elapsed.Milliseconds}ms"
-    result
-
-/// Returns a list of all the files that child nodes contain
-let indexesUnderNode (node: TrieNode) : Set<int> =
+/// Returns files contain in any node of the given Trie
+let indicesUnderNode (node: TrieNode) : Set<int> =
     let rec collect (node: TrieNode) (continuation: int list -> int list) : int list =
         let continuations: ((int list -> int list) -> int list) list =
             [
@@ -139,10 +129,15 @@ let indexesUnderNode (node: TrieNode) : Set<int> =
 
     Set.ofList (collect node id)
 
+/// <summary>
+/// For a given file's content, find all missing ("ghost") file dependencies that are required to satisfy the type-checker.  
+/// </summary>
+/// <remarks>
 /// A "ghost" dependency is a link between files that actually should be avoided.
 /// The user has a partial namespace or opens a namespace that does not produce anything.
 /// In order to still be able to compile the current file, the given namespace should be known to the file.
 /// We did not find it via the trie, because there are no files that contribute to this namespace.
+/// </remarks>
 let collectGhostDependencies (fileIndex: int) (trie: TrieNode) (queryTrie: QueryTrie) (result: FileContentQueryState) =
     // Go over all open namespaces, and assert all those links eventually went anywhere
     Set.toArray result.OpenedNamespaces
@@ -156,11 +151,11 @@ let collectGhostDependencies (fileIndex: int) (trie: TrieNode) (queryTrie: Query
                 let rec visit (node: TrieNode) (path: ModuleSegment list) =
                     match path with
                     | [] -> node
-                    | head :: tail -> visit node.Children.[head] tail
+                    | head :: tail -> visit node.Children[head] tail
 
                 visit trie path
 
-            let children = indexesUnderNode node |> Set.filter (fun idx -> idx < fileIndex)
+            let children = indicesUnderNode node |> Set.filter (fun idx -> idx < fileIndex)
             let intersection = Set.intersect result.FoundDependencies children
 
             if Set.isEmpty intersection then
@@ -193,7 +188,7 @@ let mkGraph (filePairs: FilePairMap) (files: FileWithAST array) : Graph<int> =
     let fileContents = Array.Parallel.map FileContentMapping.mkFileContent files
 
     let findDependencies (file: FileWithAST) : int * int array =
-        let fileContent = fileContents.[file.Idx]
+        let fileContent = fileContents[file.Idx]
         let knownFiles = getFileNameBefore files file.Idx
         let filesFromRoot = trie.Files |> Set.filter (fun rootIdx -> rootIdx < file.Idx)
 
