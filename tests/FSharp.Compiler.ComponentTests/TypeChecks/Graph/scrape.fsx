@@ -50,7 +50,7 @@ let mkCompilerArgsFromBinLog file =
 
 // Example:
 // The binlog was created by running `dotnet build --no-incremental -bl`
-mkCompilerArgsFromBinLog @"C:\Users\nojaf\Projects\fantomas\src\Fantomas.Core\msbuild.binlog"
-mkCompilerArgsFromBinLog @"C:\Users\nojaf\Projects\FsAutoComplete\src\FsAutoComplete\msbuild.binlog"
-mkCompilerArgsFromBinLog @"C:\Users\nojaf\Projects\fsharp\src\Compiler\msbuild.binlog"
-mkCompilerArgsFromBinLog @"C:\Users\nojaf\Projects\fsharp\tests\FSharp.Compiler.ComponentTests\msbuild.binlog"
+mkCompilerArgsFromBinLog @"C:\Projects\fantomas\src\Fantomas.Core\msbuild.binlog"
+mkCompilerArgsFromBinLog @"C:\Projects\FsAutoComplete\src\FsAutoComplete\msbuild.binlog"
+mkCompilerArgsFromBinLog @"C:\Projects\fsharp\src\Compiler\msbuild.binlog"
+mkCompilerArgsFromBinLog @"C:\Projects\fsharp\tests\FSharp.Compiler.ComponentTests\msbuild.binlog"

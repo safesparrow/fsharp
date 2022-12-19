@@ -11,10 +11,10 @@ open CompilationTests
 // The path needs to be absolute.
 let localProjects: string list =
     [
-        @"C:\Users\nojaf\Projects\fantomas\src\Fantomas.Core\Fantomas.Core.args.txt"
-        @"C:\Users\nojaf\Projects\FsAutoComplete\src\FsAutoComplete\FsAutoComplete.args.txt"
-        @"C:\Users\nojaf\Projects\fsharp\src\Compiler\FSharp.Compiler.Service.args.txt"
-        @"C:\Users\nojaf\Projects\fsharp\tests\FSharp.Compiler.ComponentTests\FSharp.Compiler.ComponentTests.args.txt"
+        @"C:\Projects\fantomas\src\Fantomas.Core\Fantomas.Core.args.txt"
+        @"C:\Projects\FsAutoComplete\src\FsAutoComplete\FsAutoComplete.args.txt"
+        @"C:\Projects\fsharp\src\Compiler\FSharp.Compiler.Service.args.txt"
+        @"C:\Projects\fsharp\tests\FSharp.Compiler.ComponentTests\FSharp.Compiler.ComponentTests.args.txt"
     ]
 
 let checker = FSharpChecker.Create()
