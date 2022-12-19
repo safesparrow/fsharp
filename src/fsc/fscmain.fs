@@ -37,7 +37,7 @@ let internal mainAux (argv: string[], onlyTypeCheck: bool, exiter: Exiter option
     use _ = new Timer("main")
 
     let compilerName =
-        // the 64 bit desktop version of the compiler is name fscAnyCpu.exe, all others are fsc.exe"
+        // the 64 bit desktop version of the compiler is name fscAnyCpu.exe, all others are fsc.exe
         if
             Environment.Is64BitProcess
             && typeof<obj>.Assembly.GetName().Name <> "System.Private.CoreLib"
