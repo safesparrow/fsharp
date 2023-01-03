@@ -35,6 +35,7 @@ open FSharp.Compiler.Text
 open FSharp.Compiler.Text.Range
 open FSharp.Compiler.TcGlobals
 open FSharp.Compiler.BuildGraph
+open FSharp.Compiler.GraphChecking
 
 [<AutoOpen>]
 module EnvMisc =
@@ -761,6 +762,44 @@ type BackgroundCompiler
                     return (parseResults, checkResults)
         }
 
+    member bc.ParseAndCheckFileInProjectUsingGraph(fileName: string, options: FSharpProjectOptions) =
+        async {
+            let idx = Array.IndexOf(options.SourceFiles, fileName)
+
+            let parsingOptions =
+                { FSharpParsingOptions.Default with
+                    SourceFiles = options.SourceFiles
+                }
+
+            let sourceTexts = Array.zeroCreate (idx + 1)
+            let parseResults = Array.zeroCreate (idx + 1)
+            
+            let! files =
+                [| 0..idx |]
+                |> Array.map (fun idx ->
+                    async {
+                        let fileName = options.SourceFiles.[idx]
+                        let sourceText = File.ReadAllText fileName |> SourceText.ofString
+                        sourceTexts.[idx] <- sourceText
+
+                        let! parseResult = bc.ParseFile(fileName, sourceText, parsingOptions, false, "meh")
+                        parseResults.[idx] <- parseResult
+
+                        return
+                            {
+                                Idx = idx
+                                File = fileName
+                                AST = parseResult.ParseTree
+                            }
+                    })
+                |> Async.Parallel
+
+            let filePairs = FilePairMap(files)
+            let graph = DependencyResolution.mkGraph filePairs files
+            let deps = List.sort [ yield! graph.[idx]; yield idx ]
+            return deps
+        }
+
     /// Fetch the check information from the background compiler (which checks w.r.t. the FileSystem API)
     member _.GetBackgroundCheckResultsForFileInProject(fileName, options, userOpName) =
         node {
@@ -1479,6 +1518,9 @@ type FSharpChecker
 
         backgroundCompiler.ParseAndCheckFileInProject(fileName, fileVersion, sourceText, options, userOpName)
         |> Async.AwaitNodeCode
+
+    member _.ParseAndCheckFileInProjectUsingGraph(fileName: string, options: FSharpProjectOptions) =
+        backgroundCompiler.ParseAndCheckFileInProjectUsingGraph(fileName, options)
 
     member _.ParseAndCheckProject(options, ?userOpName: string) =
         let userOpName = defaultArg userOpName "Unknown"

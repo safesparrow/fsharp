@@ -181,6 +181,11 @@ type public FSharpChecker =
         ?userOpName: string ->
             Async<FSharpParseFileResults * FSharpCheckFileAnswer>
 
+    member ParseAndCheckFileInProjectUsingGraph:
+        fileName: string *
+        options: FSharpProjectOptions ->
+            Async<int list>
+    
     /// <summary>
     /// <para>Parse and typecheck all files in a project.</para>
     /// <para>All files are read from the FileSystem API</para>
