@@ -60,9 +60,6 @@ module private ParallelOptimization =
     /// Each phase calls 'Optimizer.OptimizeImplFile' and performs some other tasks.
     /// Each phase uses outputs of the previous phase and outputs of previous file's optimization for the same phase.
     /// </summary>
-    /// <remarks>
-    /// <a href="file:///parallel_optimization.drawio.svg">Diagram</a>
-    /// </remarks>
     [<RequireQualifiedAccess>]
     type private OptimizationPhase =
         | Phase1

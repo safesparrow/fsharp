@@ -1,3 +1,1 @@
-This is Tyburn in a nutshell:
-
-![testdsfds](parallel_optimization.drawio.svg)
+![Optimisation chart](parallel_optimization.drawio.svg)
