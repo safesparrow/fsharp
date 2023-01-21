@@ -1,5 +1,4 @@
-﻿/// Parallel processing of graph of work items with dependencies
-module internal FSharp.Compiler.GraphChecking.GraphProcessing
+﻿module internal FSharp.Compiler.GraphChecking.GraphProcessing
 
 open System.Threading
 
@@ -34,27 +33,16 @@ type ProcessedNode<'Item, 'Result> =
         Result: 'Result
     }
 
-/// <summary>
-/// A generic method to generate results for a graph of work items in parallel.
-/// Processes leaves first, and after each node has been processed, schedules any now unblocked dependants.
-/// Returns a list of results, per item.
-/// Uses ThreadPool to schedule work.
-/// </summary>
-/// <param name="graph">Graph of work items</param>
-/// <param name="work">A function to generate results for a single item</param>
-/// <param name="ct">Cancellation token</param>
-/// <remarks>
-/// An alternative scheduling approach is to schedule N parallel tasks that process items from a BlockingCollection.
-/// My basic tests suggested it's faster, although confirming that would require more detailed testing.
-/// </remarks>
 let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
     (graph: Graph<'Item>)
     (work: ('Item -> ProcessedNode<'Item, 'Result>) -> NodeInfo<'Item> -> 'Result)
-    (ct: CancellationToken)
+    (parentCt: CancellationToken)
     : ('Item * 'Result)[] =
     let transitiveDeps = graph |> Graph.transitive
     let dependants = graph |> Graph.reverse
-
+    use localCts = new CancellationTokenSource()
+    use cts = CancellationTokenSource.CreateLinkedTokenSource(parentCt, localCts.Token)
+    
     let makeNode (item: 'Item) : GraphNode<'Item, 'Result> =
         let info =
             let exists = graph.ContainsKey item
@@ -79,19 +67,23 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
             ProcessedDepsCount = IncrementableInt(0)
         }
 
-    let nodes = graph.Keys |> Seq.map (fun item -> item, makeNode item) |> readOnlyDict
+    let nodes =
+        graph.Keys
+        |> Seq.map (fun item -> item, makeNode item)
+        |> readOnlyDict
 
-    let lookupMany items =
-        items |> Array.map (fun item -> nodes[item])
+    let lookupMany items = items |> Array.map (fun item -> nodes[item])
 
     let leaves =
-        nodes.Values |> Seq.filter (fun n -> n.Info.Deps.Length = 0) |> Seq.toArray
+        nodes.Values
+        |> Seq.filter (fun n -> n.Info.Deps.Length = 0)
+        |> Seq.toArray
 
+    // Event used to signal either an exception in one of the items or end of processing.
     let waitHandle = new ManualResetEventSlim(false)
 
     let getItemPublicNode item =
         let node = nodes[item]
-
         {
             ProcessedNode.Info = node.Info
             ProcessedNode.Result =
@@ -100,7 +92,20 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
         }
 
     let processedCount = IncrementableInt(0)
-    let mutable exn: ('Item * System.Exception) option = None
+    
+    /// Create a setter and getter for an exception raised in one of the work items.
+    /// Only the first exception encountered is stored - this can cause non-deterministic errors if more than one item fails. 
+    let setExn, getExn =
+        let mutable exn: ('Item * System.Exception) option = None
+        // Only set the exception if it hasn't been set already
+        let setExn newExn =
+            lock exn (fun () -> 
+                match exn with
+                | Some _ -> ()
+                | None -> exn <- newExn 
+            )
+        let getExn () = exn
+        setExn, getExn
 
     let incrementProcessedNodesCount () =
         if processedCount.Increment() = nodes.Count then
@@ -110,14 +115,13 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
         Async.Start(
             async {
                 let! res = async { processNode node } |> Async.Catch
-
                 match res with
                 | Choice1Of2 () -> ()
                 | Choice2Of2 ex ->
-                    exn <- Some(node.Info.Item, ex)
+                    setExn (Some(node.Info.Item, ex))
                     waitHandle.Set()
             },
-            ct
+            parentCt
         )
 
     and processNode (node: GraphNode<'Item, 'Result>) : unit =
@@ -141,10 +145,9 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
         incrementProcessedNodesCount ()
 
     leaves |> Array.iter queueNode
-
-    waitHandle.Wait(ct)
-
-    match exn with
+    
+    waitHandle.Wait(cts.Token)
+    match getExn() with
     | None -> ()
     | Some (item, ex) -> raise (System.Exception($"Encountered exception when processing item '{item}'", ex))
 

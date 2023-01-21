@@ -2,8 +2,8 @@
 
 open FSharp.Compiler.Syntax
 
-// This code just looks for a path in the trie
-// It could be cached and is easy to reason about.
+/// <summary>Find a path in the Trie.</summary>
+/// <remarks>This function could be cached in future if performance is an issue.</remarks>
 let queryTrie (trie: TrieNode) (path: LongIdentifier) : QueryTrieNodeResult =
     let rec visit (currentNode: TrieNode) (path: LongIdentifier) =
         match path with
@@ -23,13 +23,11 @@ let queryTrie (trie: TrieNode) (path: LongIdentifier) : QueryTrieNodeResult =
 
     visit trie path
 
-let queryTrieMemoized (trie: TrieNode) : QueryTrie =
+let queryTrieMemoized (trie: TrieNode) : TrieQueryFunc =
     Internal.Utilities.Library.Tables.memoize (queryTrie trie)
 
-// Now how to detect the deps between files?
-// Process the content of each file using some state
-
-let processOwnNamespace (queryTrie: QueryTrie) (path: LongIdentifier) (state: FileContentQueryState) : FileContentQueryState =
+/// Process namespace declaration.
+let processNamespaceDeclaration (queryTrie: TrieQueryFunc) (path: LongIdentifier) (state: FileContentQueryState) : FileContentQueryState =
     let queryResult = queryTrie path
 
     match queryResult with
@@ -37,9 +35,9 @@ let processOwnNamespace (queryTrie: QueryTrie) (path: LongIdentifier) (state: Fi
     | QueryTrieNodeResult.NodeDoesNotExposeData -> state.AddOwnNamespace path
     | QueryTrieNodeResult.NodeExposesData files -> state.AddOwnNamespace(path, files)
 
-// Helper function to process a open statement
-// The statement could link to files and/or should be tracked as an open namespace
-let processOpenPath (queryTrie: QueryTrie) (path: LongIdentifier) (state: FileContentQueryState) : FileContentQueryState =
+/// Process an "open" statement.
+/// The statement could link to files and/or should be tracked as an open namespace.
+let processOpenPath (queryTrie: TrieQueryFunc) (path: LongIdentifier) (state: FileContentQueryState) : FileContentQueryState =
     let queryResult = queryTrie path
 
     match queryResult with
@@ -47,8 +45,8 @@ let processOpenPath (queryTrie: QueryTrie) (path: LongIdentifier) (state: FileCo
     | QueryTrieNodeResult.NodeDoesNotExposeData -> state.AddOpenNamespace path
     | QueryTrieNodeResult.NodeExposesData files -> state.AddOpenNamespace(path, files)
 
-// Helper function to process an identifier
-let processIdentifier (queryTrie: QueryTrie) (path: LongIdentifier) (state: FileContentQueryState) : FileContentQueryState =
+/// Process an identifier.
+let processIdentifier (queryTrie: TrieQueryFunc) (path: LongIdentifier) (state: FileContentQueryState) : FileContentQueryState =
     let queryResult = queryTrie path
 
     match queryResult with
@@ -59,14 +57,14 @@ let processIdentifier (queryTrie: QueryTrie) (path: LongIdentifier) (state: File
         state
     | QueryTrieNodeResult.NodeExposesData files -> state.AddDependencies files
 
-// Typically used to folder FileContentEntry items over a FileContentQueryState
-let rec processStateEntry (queryTrie: QueryTrie) (state: FileContentQueryState) (entry: FileContentEntry) : FileContentQueryState =
+/// Typically used to fold FileContentEntry items over a FileContentQueryState
+let rec processStateEntry (queryTrie: TrieQueryFunc) (state: FileContentQueryState) (entry: FileContentEntry) : FileContentQueryState =
     match entry with
     | FileContentEntry.TopLevelNamespace (topLevelPath, content) ->
         let state =
             match topLevelPath with
             | [] -> state
-            | _ -> processOwnNamespace queryTrie topLevelPath state
+            | _ -> processNamespaceDeclaration queryTrie topLevelPath state
 
         List.fold (processStateEntry queryTrie) state content
 
@@ -109,8 +107,8 @@ let rec processStateEntry (queryTrie: QueryTrie) (state: FileContentQueryState) 
             FoundDependencies = foundDependencies
         }
 
-/// Returns files contain in any node of the given Trie
-let indicesUnderNode (node: TrieNode) : Set<FileIndex> =
+/// Return all files contained in the trie.
+let filesInTrie (node: TrieNode) : Set<FileIndex> =
     let rec collect (node: TrieNode) (continuation: FileIndex list -> FileIndex list) : FileIndex list =
         let continuations: ((FileIndex list -> FileIndex list) -> FileIndex list) list =
             [
@@ -126,84 +124,95 @@ let indicesUnderNode (node: TrieNode) : Set<FileIndex> =
     Set.ofList (collect node id)
 
 /// <summary>
-/// For a given file's content, find all missing ("ghost") file dependencies that are required to satisfy the type-checker.
+/// For a given file's content, collect all missing ("ghost") file dependencies that the core resolution algorithm didn't return,
+/// but are required to satisfy the type-checker.
 /// </summary>
 /// <remarks>
-/// A "ghost" dependency is a link between files that actually should be avoided.
-/// The user has a partial namespace or opens a namespace that does not produce anything.
-/// In order to still be able to compile the current file, the given namespace should be known to the file.
-/// We did not find it via the trie, because there are no files that contribute to this namespace.
+/// <para>Namespaces, contrary to modules, can and often are defined in multiple files.
+/// When a [partial] namespace is opened, but unused, we want to avoid having to link to all the files that define it.</para>
+/// <para>This is why, when:
+/// - a file references a namespace, but does not explicitly reference anything within it, and
+/// - the namespace does not contain any children that can be referenced implicitly (eg. by type inference),
+/// then the main resolution algorithm does not create a link to any file defining the namespace.</para>
+/// <para>However, to satisfy the type-checker, the namespace must be resolved.
+/// This function returns a list of extra dependencies that makes sure that any such namespaces can be resolved (if it exists).
+/// For each unused open namespace we return the first file in compilation order that defines it.</para>
 /// </remarks>
-let collectGhostDependencies (fileIndex: FileIndex) (trie: TrieNode) (queryTrie: QueryTrie) (result: FileContentQueryState) =
+let collectGhostDependencies (fileIndex: FileIndex) (trie: TrieNode) (queryTrie: TrieQueryFunc) (result: FileContentQueryState) =
     // Go over all open namespaces, and assert all those links eventually went anywhere
     Set.toArray result.OpenedNamespaces
-    |> Array.collect (fun path ->
+    |> Array.choose (fun path ->
         match queryTrie path with
         | QueryTrieNodeResult.NodeExposesData _
-        | QueryTrieNodeResult.NodeDoesNotExist -> Array.empty
+        | QueryTrieNodeResult.NodeDoesNotExist -> None
         | QueryTrieNodeResult.NodeDoesNotExposeData ->
             // At this point we are following up if an open namespace really lead nowhere.
             let node =
-                let rec visit (node: TrieNode) (path: LongIdentifier) =
+                let rec find (node: TrieNode) (path: LongIdentifier) =
                     match path with
                     | [] -> node
-                    | head :: tail -> visit node.Children[head] tail
+                    | head :: tail -> find node.Children[head] tail
 
-                visit trie path
+                find trie path
 
-            let children = indicesUnderNode node |> Set.filter (fun idx -> idx < fileIndex)
-            let intersection = Set.intersect result.FoundDependencies children
+            let filesDefiningNamespace = filesInTrie node |> Set.filter (fun idx -> idx < fileIndex)
+            let dependenciesDefiningNamespace = Set.intersect result.FoundDependencies filesDefiningNamespace
 
-            if Set.isEmpty intersection then
-                // The partial open did not lead to anything
-                // In order for it to exist in the current file we need to link it
-                // to some file that introduces the namespace in the trie.
-                if Set.isEmpty children then
-                    // In this case not a single file is contributing to the opened namespace.
-                    // As a last resort we assume all files are dependent, in order to preserve valid code.
-                    [| 0 .. (fileIndex - 1) |]
+            if Set.isEmpty dependenciesDefiningNamespace then
+                // There is no existing dependency defining the namespace,
+                // so we need to add one.
+                if Set.isEmpty filesDefiningNamespace then
+                    // The namespace is not defined in any file (ie. it's invalid).
+                    // There is no need to add any dependency.
+                    None
                 else
-                    [| Seq.head children |]
+                    // At least one file defines the namespace - add a dependency to the first (top) one.
+                    Some (Seq.head filesDefiningNamespace)
             else
-                // The partial open did eventually lead to a link in a file
-                Array.empty)
+                // The namespace is already defined in one of existing dependencies.
+                // No need to add anything.
+                None)
 
 let mkGraph (compilingFSharpCore: bool) (filePairs: FilePairMap) (files: FileInProject array) : Graph<FileIndex> =
-    // Implementation files backed by signatures should be excluded to construct the trie.
+    // We know that implementation files backed by signatures cannot be depended upon.
+    // Do not include them when building the Trie.
     let trieInput =
         files
         |> Array.choose (fun f ->
             match f.ParsedInput with
-            | ParsedInput.SigFile _ -> Some f
-            | ParsedInput.ImplFile _ -> if filePairs.HasSignature f.Idx then None else Some f)
+            | ParsedInput.ImplFile _ when filePairs.HasSignature f.Idx -> None
+            | ParsedInput.ImplFile _
+            | ParsedInput.SigFile _ -> Some f)
 
     let trie = TrieMapping.mkTrie trieInput
-    let queryTrie: QueryTrie = queryTrieMemoized trie
+    let queryTrie: TrieQueryFunc = queryTrieMemoized trie
 
     let fileContents = files |> Array.Parallel.map FileContentMapping.mkFileContent
 
-    let findDependencies (file: FileInProject) : FileIndex * FileIndex array =
+    let findDependencies (file: FileInProject) : FileIndex array =
         let fileContent = fileContents[file.Idx]
         let knownFiles = set [ 0 .. (file.Idx - 1) ]
+        // File depends on all files above it that define accessible symbols at the root level (global namespace). 
         let filesFromRoot = trie.Files |> Set.filter (fun rootIdx -> rootIdx < file.Idx)
-
-        // Process all entries of a file and query the trie when required to find the dependent files.
-        let result =
+        // Start by listing root-level dependencies.        
+        let initialDepsResult = (FileContentQueryState.Create file.Idx knownFiles filesFromRoot), fileContent
+        // Sequentially process all relevant entries of the file and keep updating the state and set of dependencies.
+        let depsResult =
+            initialDepsResult
             // Seq is faster than List in this case.
-            ((FileContentQueryState.Create file.Idx knownFiles filesFromRoot), fileContent)
             ||> Seq.fold (processStateEntry queryTrie)
 
-        // after processing the file we should verify if any of the open statements are found in the trie but do not yield any file link.
-        let ghostDependencies = collectGhostDependencies file.Idx trie queryTrie result
+        // Add missing links for cases where an unused open namespace did not create a link.
+        let ghostDependencies = collectGhostDependencies file.Idx trie queryTrie depsResult
 
-        // Automatically add a link from an implementation to its signature file (if present)
+        // Add a link from implementation files to their signature files.
         let signatureDependency =
             match filePairs.TryGetSignatureIndex file.Idx with
             | None -> Array.empty
             | Some sigIdx -> Array.singleton sigIdx
 
-        // Files in FSharp.Core all need to know about `prim-types-prelude`.
-        let fsharpCoreBuildProperties =
+        // Files in FSharp.Core have an implicit dependency on `prim-types-prelude.fsi` - add it.
+        let fsharpCoreImplicitDependencies =
             if not compilingFSharpCore then
                 Array.empty
             else
@@ -217,13 +226,15 @@ let mkGraph (compilingFSharpCore: bool) (filePairs: FilePairMap) (files: FileInP
 
         let allDependencies =
             [|
-                yield! result.FoundDependencies
+                yield! depsResult.FoundDependencies
                 yield! ghostDependencies
                 yield! signatureDependency
-                yield! fsharpCoreBuildProperties
+                yield! fsharpCoreImplicitDependencies
             |]
             |> Array.distinct
 
-        file.Idx, allDependencies
+        allDependencies
 
-    files |> Array.Parallel.map findDependencies |> readOnlyDict
+    files
+    |> Array.Parallel.map (fun file -> file.Idx, findDependencies file)
+    |> readOnlyDict

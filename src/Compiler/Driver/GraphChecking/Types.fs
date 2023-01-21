@@ -133,7 +133,7 @@ type internal QueryTrieNodeResult =
     /// A node was found with one or more file links
     | NodeExposesData of Set<FileIndex>
 
-type internal QueryTrie = LongIdentifier -> QueryTrieNodeResult
+type internal TrieQueryFunc = LongIdentifier -> QueryTrieNodeResult
 
 /// Helper class to help map signature files to implementation files and vice versa.
 type internal FilePairMap(files: FileInProject array) =
