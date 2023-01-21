@@ -155,8 +155,11 @@ let collectGhostDependencies (fileIndex: FileIndex) (trie: TrieNode) (queryTrie:
 
                 find trie path
 
-            let filesDefiningNamespace = filesInTrie node |> Set.filter (fun idx -> idx < fileIndex)
-            let dependenciesDefiningNamespace = Set.intersect result.FoundDependencies filesDefiningNamespace
+            let filesDefiningNamespace =
+                filesInTrie node |> Set.filter (fun idx -> idx < fileIndex)
+
+            let dependenciesDefiningNamespace =
+                Set.intersect result.FoundDependencies filesDefiningNamespace
 
             if Set.isEmpty dependenciesDefiningNamespace then
                 // There is no existing dependency defining the namespace,
@@ -167,7 +170,7 @@ let collectGhostDependencies (fileIndex: FileIndex) (trie: TrieNode) (queryTrie:
                     None
                 else
                     // At least one file defines the namespace - add a dependency to the first (top) one.
-                    Some (Seq.head filesDefiningNamespace)
+                    Some(Seq.head filesDefiningNamespace)
             else
                 // The namespace is already defined in one of existing dependencies.
                 // No need to add anything.
@@ -192,10 +195,11 @@ let mkGraph (compilingFSharpCore: bool) (filePairs: FilePairMap) (files: FileInP
     let findDependencies (file: FileInProject) : FileIndex array =
         let fileContent = fileContents[file.Idx]
         let knownFiles = set [ 0 .. (file.Idx - 1) ]
-        // File depends on all files above it that define accessible symbols at the root level (global namespace). 
+        // File depends on all files above it that define accessible symbols at the root level (global namespace).
         let filesFromRoot = trie.Files |> Set.filter (fun rootIdx -> rootIdx < file.Idx)
-        // Start by listing root-level dependencies.        
-        let initialDepsResult = (FileContentQueryState.Create file.Idx knownFiles filesFromRoot), fileContent
+        // Start by listing root-level dependencies.
+        let initialDepsResult =
+            (FileContentQueryState.Create file.Idx knownFiles filesFromRoot), fileContent
         // Sequentially process all relevant entries of the file and keep updating the state and set of dependencies.
         let depsResult =
             initialDepsResult

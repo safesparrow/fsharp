@@ -32,18 +32,15 @@ module internal Graph =
         |> Seq.toArray
 
     let addIfMissing<'Node when 'Node: equality> (nodes: 'Node seq) (graph: Graph<'Node>) : Graph<'Node> =
-        let missingNodes =
-            nodes
-            |> Seq.except graph.Keys
-            |> Seq.toArray
+        let missingNodes = nodes |> Seq.except graph.Keys |> Seq.toArray
+
         let entriesToAdd =
-            missingNodes
-            |> Seq.map (fun n -> KeyValuePair(n, [||]))
-            |> Seq.toArray
+            missingNodes |> Seq.map (fun n -> KeyValuePair(n, [||])) |> Seq.toArray
+
         graph
         |> Seq.toArray
         |> Array.append entriesToAdd
-        |> Array.map (fun (KeyValue(k, v)) -> k, v)
+        |> Array.map (fun (KeyValue (k, v)) -> k, v)
         |> readOnlyDict
 
     let transitive<'Node when 'Node: equality> (graph: Graph<'Node>) : Graph<'Node> =

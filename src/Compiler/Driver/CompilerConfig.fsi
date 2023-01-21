@@ -214,10 +214,12 @@ type TypeCheckingMode =
 /// Some of the information dedicated to type-checking.
 [<RequireQualifiedAccess>]
 type TypeCheckingConfig =
-    { Mode: TypeCheckingMode
-      /// When using TypeCheckingMode.Graph, this flag determines whether the
-      /// resolved file graph should be serialised as a Mermaid diagram into a file next to the output dll.
-      DumpGraph: bool }
+    {
+        Mode: TypeCheckingMode
+        /// When using TypeCheckingMode.Graph, this flag determines whether the
+        /// resolved file graph should be serialised as a Mermaid diagram into a file next to the output dll.
+        DumpGraph: bool
+    }
 
 [<NoEquality; NoComparison>]
 type TcConfigBuilder =

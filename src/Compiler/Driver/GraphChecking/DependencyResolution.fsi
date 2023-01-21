@@ -22,7 +22,7 @@ val processOpenPath:
 /// *The constructed graph is a supergraph of the "necessary" file dependency graph,
 /// ie. if file A is necessary to type-check file B, the resulting graph will contain edge B -> A.
 /// The opposite is not true, ie. if file A is not necessary to type-check file B, the resulting graph *might* contain edge B -> A.
-/// This is because the graph resolution algorithm has limited capability as it is based on ASTs alone.  
+/// This is because the graph resolution algorithm has limited capability as it is based on ASTs alone.
 /// </para>
 /// <para>
 /// The file order is used by the resolution algorithm to remove edges not allowed by the language.
