@@ -21,7 +21,7 @@ type internal Identifier = string
 
 /// Represents one or more identifiers in the syntax tree.
 /// For example, `[ "X"; "Y"; "Z" ]` in `open X.Y.Z`
-type internal LongIdentifier = string list
+type internal LongIdentifier = Identifier list
 
 /// Combines the file name, index and parsed syntax tree of a file in a project.
 type internal FileInProject =
@@ -40,10 +40,15 @@ type internal TrieNodeInfo =
 
     member Files: Set<FileIndex>
 
+/// A node in the Trie structure.
 type internal TrieNode =
-    { Current: TrieNodeInfo
+    {
+      /// Information about this node.
+      Current: TrieNodeInfo
+      /// Child nodes
       Children: Dictionary<Identifier, TrieNode> }
 
+    /// Zero or more files that define the LongIdentifier represented by this node. 
     member Files: Set<FileIndex>
 
 /// A significant construct found in the syntax tree of a file.
@@ -58,9 +63,10 @@ type internal FileContentEntry =
     /// The last part of the identifier should not be included.
     | PrefixedIdentifier of path: LongIdentifier
     /// Being explicit about nested modules allows for easier reasoning what namespaces (paths) are open.
-    /// We can scope an `OpenStatement` to the everything that is happening inside the nested module.
+    /// For example we can limit the scope of an `OpenStatement` to symbols defined inside the nested module.
     | NestedModule of name: string * nestedContent: FileContentEntry list
 
+/// File identifiers and its content extract for dependency resolution
 type internal FileContent =
     { FileName: FileName
       Idx: FileIndex
@@ -80,18 +86,22 @@ type internal FileContentQueryState =
     member AddOpenNamespace: path: LongIdentifier * ?files: Set<FileIndex> -> FileContentQueryState
     member OpenNamespaces: Set<LongIdentifier>
 
-/// The result type of querying a Trie Node.
-/// The requested node either did not exist, is part of the trie but but no expose data or was found and exposes data.
+/// Result of querying a Trie Node.
 [<RequireQualifiedAccess>]
 type internal QueryTrieNodeResult =
-    /// No node was found for the path in the trie
+    /// No node was found for the path in the trie.
     | NodeDoesNotExist
-    /// A node was found but it yielded no file links
+    /// <summary>A node was found but no file exposes data for the LongIdentifier in question.</summary>
+    /// <example>
+    /// This could happen if there is a single file with a top-level module `module A.B`,
+    /// and we search for `A`.
+    /// Although the `A` path exists in the Trie, it does not contain any relevant definitions (beyond itself).
+    /// </example>  
     | NodeDoesNotExposeData
-    /// A node was found with one or more file links
+    /// A node was found with one or more files that contain relevant definitions required for type-checking.  
     | NodeExposesData of Set<FileIndex>
 
-/// A function for querying a Trie (defined within the function's context)
+/// A function for querying a Trie (the Trie is defined within the function's context)
 type internal TrieQueryFunc = LongIdentifier -> QueryTrieNodeResult
 
 /// Helper class for mapping signature files to implementation files and vice versa.
