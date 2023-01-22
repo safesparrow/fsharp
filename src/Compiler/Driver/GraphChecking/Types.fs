@@ -6,14 +6,16 @@ open FSharp.Compiler.Syntax
 /// The index of a file inside a project.
 [<Struct>]
 [<System.Diagnostics.DebuggerDisplay("{Value}")>]
-type internal FileIndex = FileIndex of int
-    with
-        member inline this.Value = match this with FileIndex idx -> idx
-        member inline this.Before(other : FileIndex) =
-            this.Value < other.Value
-        member inline this.After(other : FileIndex) =
-            this.Value > other.Value
-        override this.ToString() = this.Value.ToString()
+type internal FileIndex =
+    | FileIndex of int
+
+    member inline this.Value =
+        match this with
+        | FileIndex idx -> idx
+
+    member inline this.Before(other: FileIndex) = this.Value < other.Value
+    member inline this.After(other: FileIndex) = this.Value > other.Value
+    override this.ToString() = this.Value.ToString()
 
 /// File name captured by ParsedInput.FileName.
 type internal FileName = string

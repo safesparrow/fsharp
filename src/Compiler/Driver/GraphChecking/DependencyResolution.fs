@@ -194,7 +194,9 @@ let mkGraph (compilingFSharpCore: bool) (filePairs: FilePairMap) (files: FileInP
 
     let findDependencies (file: FileInProject) : FileIndex array =
         let fileContent = fileContents[file.Idx.Value]
-        let knownFiles = [ 0 .. (file.Idx.Value - 1) ] |> List.map FileIndex.FileIndex |> set 
+
+        let knownFiles =
+            [ 0 .. (file.Idx.Value - 1) ] |> List.map FileIndex.FileIndex |> set
         // File depends on all files above it that define accessible symbols at the root level (global namespace).
         let filesFromRoot = trie.Files |> Set.filter (fun rootIdx -> rootIdx < file.Idx)
         // Start by listing root-level dependencies.
@@ -221,17 +223,22 @@ let mkGraph (compilingFSharpCore: bool) (filePairs: FilePairMap) (files: FileInP
                 Array.empty
             else
                 let filename = "prim-types-prelude.fsi"
+
                 let implicitDepIdx =
                     files
                     |> Array.tryFindIndex (fun f -> System.IO.Path.GetFileName(f.FileName) = filename)
+
                 match implicitDepIdx with
                 | Some idx ->
                     let idx = FileIndex idx
+
                     [|
                         if file.Idx.After idx then
                             yield idx
                     |]
-                | None -> exn $"Expected to find file '{filename}' during compilation of FSharp.Core, but it was not found." |> raise
+                | None ->
+                    exn $"Expected to find file '{filename}' during compilation of FSharp.Core, but it was not found."
+                    |> raise
 
         let allDependencies =
             [|

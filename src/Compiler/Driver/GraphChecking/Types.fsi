@@ -7,10 +7,10 @@ open FSharp.Compiler.Syntax
 [<Struct>]
 type internal FileIndex =
     | FileIndex of int
-    
-    member inline Value : int
-    member inline Before : FileIndex -> bool
-    member inline After : FileIndex -> bool
+
+    member inline Value: int
+    member inline Before: FileIndex -> bool
+    member inline After: FileIndex -> bool
 
 /// File name captured by ParsedInput.FileName.
 type internal FileName = string
