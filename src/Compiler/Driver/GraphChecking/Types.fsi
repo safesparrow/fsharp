@@ -4,9 +4,15 @@ open System.Collections.Generic
 open FSharp.Compiler.Syntax
 
 /// The index of a file inside a project.
-type internal FileIndex = int
+[<Struct>]
+type internal FileIndex =
+    | FileIndex of int
+    
+    member inline Value : int
+    member inline Before : FileIndex -> bool
+    member inline After : FileIndex -> bool
 
-/// File name capture by ParsedInput.FileName
+/// File name captured by ParsedInput.FileName.
 type internal FileName = string
 
 /// Represents the string value of a single identifier in the syntax tree.

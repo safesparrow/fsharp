@@ -85,7 +85,7 @@ module internal Graph =
     let print (graph: Graph<'Node>) : unit =
         printCustom graph (fun node -> node.ToString())
 
-    let serialiseToMermaid path (graph: Graph<int * string>) =
+    let serialiseToMermaid path (graph: Graph<FileIndex * string>) =
         let sb = StringBuilder()
         let appendLine (line: string) = sb.AppendLine(line) |> ignore
 
@@ -93,11 +93,11 @@ module internal Graph =
         appendLine "flowchart RL"
 
         for KeyValue ((idx, fileName), _) in graph do
-            appendLine $"    %i{idx}[\"%s{fileName}\"]"
+            appendLine $"    %i{idx.Value}[\"%s{fileName}\"]"
 
         for KeyValue ((idx, _), deps) in graph do
             for depIdx, _depFileName in deps do
-                appendLine $"    %i{idx} --> %i{depIdx}"
+                appendLine $"    %i{idx.Value} --> %i{depIdx.Value}"
 
         appendLine "```"
 

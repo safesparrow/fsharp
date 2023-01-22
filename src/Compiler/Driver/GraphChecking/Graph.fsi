@@ -18,4 +18,4 @@ module internal Graph =
     /// Print the contents of the graph to the standard output.
     val print: graph: Graph<'Node> -> unit
     /// Create a simple Mermaid graph and save it under the path specified.
-    val serialiseToMermaid: path: string -> graph: Graph<int * string> -> unit
+    val serialiseToMermaid: path: string -> graph: Graph<FileIndex * string> -> unit
