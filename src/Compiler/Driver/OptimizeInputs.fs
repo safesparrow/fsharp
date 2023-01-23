@@ -407,7 +407,7 @@ let ApplyAllOptimizations
         file, prevPhase
     addPhase "LowerCalls" lowerCalls
     
-    let phase34 ({File = file; PrevPhase = prevPhase; PrevFile = prevFile} : PhaseInputs) : PhaseRess =
+    let finalSimplify ({File = file; PrevPhase = prevPhase; PrevFile = prevFile} : PhaseInputs) : PhaseRess =
         let (optEnvFinalSimplify, file, _, _), _ =
             Optimizer.OptimizeImplFile(
                 phase2And3Settings,
@@ -429,7 +429,7 @@ let ApplyAllOptimizations
                 OptEnvFinalSimplify = optEnvFinalSimplify
         }
     if tcConfig.doFinalSimplify then
-        addPhase "FinalSimplify" phase34    
+        addPhase "FinalSimplify" finalSimplify    
     
     let phases = phases.ToArray()
     
