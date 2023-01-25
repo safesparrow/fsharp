@@ -93,11 +93,11 @@ module internal Graph =
         appendLine "flowchart RL"
 
         for KeyValue ((idx, fileName), _) in graph do
-            appendLine $"    %i{idx.Value}[\"%s{fileName}\"]"
+            appendLine $"    %i{idx}[\"%s{fileName}\"]"
 
         for KeyValue ((idx, _), deps) in graph do
             for depIdx, _depFileName in deps do
-                appendLine $"    %i{idx.Value} --> %i{depIdx.Value}"
+                appendLine $"    %i{idx} --> %i{depIdx}"
 
         appendLine "```"
 

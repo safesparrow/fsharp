@@ -1648,7 +1648,7 @@ let CheckMultipleInputsUsingGraphMode
         |> List.toArray
         |> Array.mapi (fun idx (input: ParsedInput) ->
             {
-                Idx = FileIndex idx
+                Idx = idx
                 FileName = input.FileName
                 ParsedInput = input
             })
@@ -1705,7 +1705,7 @@ let CheckMultipleInputsUsingGraphMode
             graph
             |> Graph.map (fun idx ->
                 let friendlyFileName =
-                    sourceFiles[idx.Value]
+                    sourceFiles[idx]
                         .FileName.Replace(tcConfig.implicitIncludeDir, "")
                         .TrimStart([| '\\'; '/' |])
 

@@ -8,7 +8,7 @@ val queryTrie: trie: TrieNode -> path: LongIdentifier -> QueryTrieNodeResult
 /// <summary>Process an open path (found in the ParsedInput) with a given FileContentQueryState.</summary>
 /// <remarks>This code is only used directly in unit tests.</remarks>
 val processOpenPath:
-    queryTrie: TrieQueryFunc -> path: LongIdentifier -> state: FileContentQueryState -> FileContentQueryState
+    queryTrie: QueryTrie -> path: LongIdentifier -> state: FileContentQueryState -> FileContentQueryState
 
 /// <summary>
 /// Construct an approximate* dependency graph for files within a project, based on their ASTs.

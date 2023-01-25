@@ -40,6 +40,7 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
     : ('Item * 'Result)[] =
     let transitiveDeps = graph |> Graph.transitive
     let dependants = graph |> Graph.reverse
+    // Cancellation source used to signal either an exception in one of the items or end of processing.
     use localCts = new CancellationTokenSource()
     use cts = CancellationTokenSource.CreateLinkedTokenSource(parentCt, localCts.Token)
 
@@ -75,9 +76,6 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
     let leaves =
         nodes.Values |> Seq.filter (fun n -> n.Info.Deps.Length = 0) |> Seq.toArray
 
-    // Event used to signal either an exception in one of the items or end of processing.
-    let waitHandle = new ManualResetEventSlim(false)
-
     let getItemPublicNode item =
         let node = nodes[item]
 
@@ -92,21 +90,23 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
 
     /// Create a setter and getter for an exception raised in one of the work items.
     /// Only the first exception encountered is stored - this can cause non-deterministic errors if more than one item fails.
-    let setExn, getExn =
+    let raiseExn, getExn =
         let mutable exn: ('Item * System.Exception) option = None
         // Only set the exception if it hasn't been set already
         let setExn newExn =
             lock exn (fun () ->
                 match exn with
                 | Some _ -> ()
-                | None -> exn <- newExn)
+                | None -> exn <- newExn
+                localCts.Cancel()
+            )
 
         let getExn () = exn
         setExn, getExn
 
     let incrementProcessedNodesCount () =
         if processedCount.Increment() = nodes.Count then
-            waitHandle.Set()
+            localCts.Cancel()
 
     let rec queueNode node =
         Async.Start(
@@ -116,10 +116,9 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
                 match res with
                 | Choice1Of2 () -> ()
                 | Choice2Of2 ex ->
-                    setExn (Some(node.Info.Item, ex))
-                    waitHandle.Set()
+                    raiseExn (Some(node.Info.Item, ex))
             },
-            parentCt
+            cts.Token
         )
 
     and processNode (node: GraphNode<'Item, 'Result>) : unit =
@@ -144,12 +143,17 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
 
     leaves |> Array.iter queueNode
 
-    waitHandle.Wait(cts.Token)
+    // Wait for end of processing, an exception, or an external cancellation request.
+    cts.Token.WaitHandle.WaitOne() |> ignore
+    // If we stopped early due to external cancellation, throw.
+    parentCt.ThrowIfCancellationRequested()
 
+    // If we stopped early due to an exception, reraise it.
     match getExn () with
     | None -> ()
     | Some (item, ex) -> raise (System.Exception($"Encountered exception when processing item '{item}'", ex))
 
+    // All calculations succeeded - extract the results and sort in input order. 
     nodes.Values
     |> Seq.map (fun node ->
         let result =

@@ -4,13 +4,7 @@ open System.Collections.Generic
 open FSharp.Compiler.Syntax
 
 /// The index of a file inside a project.
-[<Struct>]
-type internal FileIndex =
-    | FileIndex of int
-
-    member inline Value: int
-    member inline Before: FileIndex -> bool
-    member inline After: FileIndex -> bool
+type internal FileIndex = int
 
 /// File name captured by ParsedInput.FileName.
 type internal FileName = string
@@ -102,7 +96,7 @@ type internal QueryTrieNodeResult =
     | NodeExposesData of Set<FileIndex>
 
 /// A function for querying a Trie (the Trie is defined within the function's context)
-type internal TrieQueryFunc = LongIdentifier -> QueryTrieNodeResult
+type internal QueryTrie = LongIdentifier -> QueryTrieNodeResult
 
 /// Helper class for mapping signature files to implementation files and vice versa.
 type internal FilePairMap =
