@@ -98,8 +98,8 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
                 match exn with
                 | Some _ -> ()
                 | None -> exn <- newExn
-                localCts.Cancel()
-            )
+
+                localCts.Cancel())
 
         let getExn () = exn
         setExn, getExn
@@ -115,8 +115,7 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
 
                 match res with
                 | Choice1Of2 () -> ()
-                | Choice2Of2 ex ->
-                    raiseExn (Some(node.Info.Item, ex))
+                | Choice2Of2 ex -> raiseExn (Some(node.Info.Item, ex))
             },
             cts.Token
         )
@@ -153,7 +152,7 @@ let processGraph<'Item, 'Result when 'Item: equality and 'Item: comparison>
     | None -> ()
     | Some (item, ex) -> raise (System.Exception($"Encountered exception when processing item '{item}'", ex))
 
-    // All calculations succeeded - extract the results and sort in input order. 
+    // All calculations succeeded - extract the results and sort in input order.
     nodes.Values
     |> Seq.map (fun node ->
         let result =

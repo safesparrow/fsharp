@@ -37,12 +37,13 @@ type internal TrieNodeInfo =
 /// A node in the Trie structure.
 type internal TrieNode =
     {
-      /// Information about this node.
-      Current: TrieNodeInfo
-      /// Child nodes
-      Children: Dictionary<Identifier, TrieNode> }
+        /// Information about this node.
+        Current: TrieNodeInfo
+        /// Child nodes
+        Children: Dictionary<Identifier, TrieNode>
+    }
 
-    /// Zero or more files that define the LongIdentifier represented by this node. 
+    /// Zero or more files that define the LongIdentifier represented by this node.
     member Files: Set<FileIndex>
 
 /// A significant construct found in the syntax tree of a file.
@@ -90,9 +91,9 @@ type internal QueryTrieNodeResult =
     /// This could happen if there is a single file with a top-level module `module A.B`,
     /// and we search for `A`.
     /// Although the `A` path exists in the Trie, it does not contain any relevant definitions (beyond itself).
-    /// </example>  
+    /// </example>
     | NodeDoesNotExposeData
-    /// A node was found with one or more files that contain relevant definitions required for type-checking.  
+    /// A node was found with one or more files that contain relevant definitions required for type-checking.
     | NodeExposesData of Set<FileIndex>
 
 /// A function for querying a Trie (the Trie is defined within the function's context)

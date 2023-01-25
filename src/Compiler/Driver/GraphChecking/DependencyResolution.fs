@@ -168,7 +168,7 @@ let collectGhostDependencies (fileIndex: FileIndex) (trie: TrieNode) (queryTrie:
                     // No file defines inferrable symbols for this namespace, but the namespace might exist.
                     // Because we don't track what files define a namespace without any relevant content,
                     // the only way to ensure the namespace is in scope is to add a link to every preceeding file.
-                    // The alternative would be 
+                    // The alternative would be
                     [| 0 .. (fileIndex - 1) |]
                 else
                     // At least one file defines the namespace - add a dependency to the first (top) one.
@@ -197,8 +197,7 @@ let mkGraph (compilingFSharpCore: bool) (filePairs: FilePairMap) (files: FileInP
     let findDependencies (file: FileInProject) : FileIndex array =
         let fileContent = fileContents[file.Idx]
 
-        let knownFiles =
-            [ 0 .. (file.Idx - 1) ] |> set
+        let knownFiles = [ 0 .. (file.Idx - 1) ] |> set
         // File depends on all files above it that define accessible symbols at the root level (global namespace).
         let filesFromRoot = trie.Files |> Set.filter (fun rootIdx -> rootIdx < file.Idx)
         // Start by listing root-level dependencies.
