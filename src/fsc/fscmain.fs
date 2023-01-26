@@ -17,38 +17,13 @@ open FSharp.Compiler.Driver
 open FSharp.Compiler.DiagnosticsLogger
 open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.Text
-open OpenTelemetry
-open OpenTelemetry.Resources
-open OpenTelemetry.Trace
 
 [<Dependency("FSharp.Compiler.Service", LoadHint.Always)>]
 do ()
 
-let setupOtel () =
-    printfn "Set up OTEL"
-    Sdk
-        .CreateTracerProviderBuilder()
-        .AddSource("fsc")
-        .SetResourceBuilder(
-            ResourceBuilder
-                .CreateDefault()
-                .AddService(serviceName = "fsc", serviceVersion = "42.42.42.44")
-        )
-        .AddJaegerExporter(fun c ->
-            c.BatchExportProcessorOptions.MaxQueueSize <- 10000000
-            c.BatchExportProcessorOptions.MaxExportBatchSize <- 10000000
-            c.ExportProcessorType <- ExportProcessorType.Simple
-            c.MaxPayloadSizeInBytes <- Nullable(1000000000))
-        .Build()
-
-let cleanupOtel (otel: TracerProvider) =
-    otel.ForceFlush() |> ignore
-    otel.Dispose()
-
 [<EntryPoint>]
 let main (argv) =
-    let otel = setupOtel ()
-    use _ = FSharp.Compiler.Diagnostics.Activity.startNoTags "fsc"
+
     let compilerName =
         // the 64 bit desktop version of the compiler is name fscAnyCpu.exe, all others are fsc.exe
         if
@@ -119,10 +94,9 @@ let main (argv) =
             None
         )
 
-        cleanupOtel otel
         0
+
     with e ->
         // Last-chance error recovery (note, with a poor error range)
         errorRecovery e Range.range0
-        cleanupOtel otel
         1
