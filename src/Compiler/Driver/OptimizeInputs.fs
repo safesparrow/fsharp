@@ -6,6 +6,7 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Diagnostics
 open System.IO
+open System.Threading
 open System.Threading.Tasks
 open Internal.Utilities.Library
 open FSharp.Compiler
@@ -166,29 +167,39 @@ module private ParallelOptimization =
             
         let getNodeInputs (node : Node) =
             task {
-                let! prevPhaseFile, prevPhaseRes =
+                let prevPhaseTask =
                     if node.Phase > 0 then
                         getTask {node with Phase = node.Phase-1}
                     else
                         // First phase uses input file without modifications
                         (files[node.FileIdx], initialState)
                         |> Task.FromResult
-                let! _prevFileFile, prevFileRes =
+                let prevFileTask =
                     if node.FileIdx > 0 then
                         getTask {node with FileIdx = node.FileIdx-1}
                     else
                         // We don't use the file result in this case, but we need something, so just take the first input file as a placeholder. 
                         (files[0], initialState)
                         |> Task.FromResult
+                
+                let! results = [|prevPhaseTask; prevFileTask|] |> Task.WhenAll
+                let prevPhaseFile, prevPhaseRes = results[0]
+                let _prevFileFile, prevFileRes = results[1]
                 let inputs = {File = prevPhaseFile; FileIdx = node.FileIdx; PrevPhase = prevPhaseRes; PrevFile = prevFileRes}
                 return inputs
             }
         
         let startNodeTask (phase : PhaseInfo) (node : Node) =
-            task {
-                let! inputs = getNodeInputs node
-                return phase.Func inputs
-            }
+            // A workaround to make sure that the initial part of each task is scheduled asynchronously
+            async {
+                let nodeTask =
+                    task {
+                        let! inputs = getNodeInputs node
+                        let res = phase.Func inputs
+                        return res
+                    }
+                return! nodeTask |> Async.AwaitTask
+            } |> Async.StartAsTask
         
         let fileIndices = [|0..files.Length-1|]
         
@@ -316,7 +327,7 @@ let ApplyAllOptimizations
                         "QualifiedNameOfFile", inputs.File.QualifiedNameOfFile.Text
                         "OptimisationPhase", info.Name
                     |]
-                FSharp.Compiler.Diagnostics.Activity.start $"file-{info.Idx}_phase-{info.Name}" tags
+                FSharp.Compiler.Diagnostics.Activity.start $"file-{inputs.FileIdx}_phase-{info.Name}" tags
             f inputs
     
     let phases = List<PhaseInfo>()
