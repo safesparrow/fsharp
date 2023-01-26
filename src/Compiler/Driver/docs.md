@@ -1,1 +1,0 @@
-![Optimisation chart](parallel_optimization.drawio.svg)

@@ -497,8 +497,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Driver\docs.md" />
-    <Content Include="Driver\parallel_optimization.drawio.svg" />
+    <Content Include="Driver\parallel-optimization.md" />
+    <Content Include="Driver\parallel-optimization.drawio.svg" />
   </ItemGroup>
 
 </Project>
