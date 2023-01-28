@@ -397,6 +397,63 @@ let ApplyAllOptimizations
                 file
             )
 
+        let file = LowerLocalMutables.TransformImplFile tcGlobals importMap file
+        
+        let (optEnvExtraLoop, file) =
+            if tcConfig.extraOptimizationIterations > 0 then
+                let (optEnvExtraLoop, file, _, _), _ =
+                    Optimizer.OptimizeImplFile(
+                        phase2And3Settings,
+                        ccu,
+                        tcGlobals,
+                        tcVal,
+                        importMap,
+                        prevFile.OptEnvExtraLoop,
+                        isIncrementalFragment,
+                        tcConfig.fsiMultiAssemblyEmit,
+                        tcConfig.emitTailcalls,
+                        prevPhase.FirstLoopRes.HidingInfo,
+                        file
+                    )
+                optEnvExtraLoop, file
+            else
+                prevPhase.OptEnvExtraLoop, file
+        
+        let file =
+            if tcConfig.doDetuple then
+                file |> Detuple.DetupleImplFile ccu tcGlobals
+            else
+                file                
+        
+        let file =
+            if tcConfig.doTLR then
+                file
+                |> InnerLambdasToTopLevelFuncs.MakeTopLevelRepresentationDecisions ccu tcGlobals
+            else
+                file
+        
+        let file = LowerCalls.LowerImplFile tcGlobals file
+
+        let optEnvFinalSimplify, file =
+            if tcConfig.doFinalSimplify then
+                let (optEnvFinalSimplify, file, _, _), _ =
+                    Optimizer.OptimizeImplFile(
+                        phase2And3Settings,
+                        ccu,
+                        tcGlobals,
+                        tcVal,
+                        importMap,
+                        prevFile.OptEnvFinalSimplify,
+                        isIncrementalFragment,
+                        tcConfig.fsiMultiAssemblyEmit,
+                        tcConfig.emitTailcalls,
+                        prevPhase.FirstLoopRes.HidingInfo,
+                        file
+                    )
+                optEnvFinalSimplify, file
+            else
+                prevPhase.OptEnvFinalSimplify, file
+        
         file,
         { prevPhase with
             FirstLoopRes =
@@ -406,122 +463,11 @@ let ApplyAllOptimizations
                     HidingInfo = hidingInfo
                     OptDuringCodeGen = optDuringCodeGen
                 }
-        }
-
-    addPhase "firstLoop" firstLoop
-
-    let lowerLocalMutables
-        ({
-             File = file
-             PrevPhase = prevPhase
-             PrevFile = _prevFile
-         }: PhaseInputs)
-        : PhaseRes =
-        let file = LowerLocalMutables.TransformImplFile tcGlobals importMap file
-        file, prevPhase
-
-    addPhase "lowerLocalMutables" lowerLocalMutables
-
-    let extraLoop
-        ({
-             File = file
-             PrevPhase = prevPhase
-             PrevFile = prevFile
-         }: PhaseInputs)
-        : PhaseRes =
-        let (optEnvExtraLoop, file, _, _), _ =
-            Optimizer.OptimizeImplFile(
-                phase2And3Settings,
-                ccu,
-                tcGlobals,
-                tcVal,
-                importMap,
-                prevFile.OptEnvExtraLoop,
-                isIncrementalFragment,
-                tcConfig.fsiMultiAssemblyEmit,
-                tcConfig.emitTailcalls,
-                prevPhase.FirstLoopRes.HidingInfo,
-                file
-            )
-
-        file,
-        { prevPhase with
             OptEnvExtraLoop = optEnvExtraLoop
-        }
-
-    if tcConfig.extraOptimizationIterations > 0 then
-        addPhase "ExtraLoop" extraLoop
-
-    let detuple
-        ({
-             File = file
-             PrevPhase = prevPhase
-             PrevFile = _prevFile
-         }: PhaseInputs)
-        : PhaseRes =
-        let file = file |> Detuple.DetupleImplFile ccu tcGlobals
-        file, prevPhase
-
-    if tcConfig.doDetuple then
-        addPhase "Detuple" detuple
-
-    let innerLambdasToToplevelFuncs
-        ({
-             File = file
-             PrevPhase = prevPhase
-             PrevFile = _prevFile
-         }: PhaseInputs)
-        : PhaseRes =
-        let file =
-            file
-            |> InnerLambdasToTopLevelFuncs.MakeTopLevelRepresentationDecisions ccu tcGlobals
-
-        file, prevPhase
-
-    if tcConfig.doTLR then
-        addPhase "InnerLambdasToToplevelFuncs" innerLambdasToToplevelFuncs
-
-    let lowerCalls
-        ({
-             File = file
-             PrevPhase = prevPhase
-             PrevFile = _prevFile
-         }: PhaseInputs)
-        : PhaseRes =
-        let file = LowerCalls.LowerImplFile tcGlobals file
-        file, prevPhase
-
-    addPhase "LowerCalls" lowerCalls
-
-    let finalSimplify
-        ({
-             File = file
-             PrevPhase = prevPhase
-             PrevFile = prevFile
-         }: PhaseInputs)
-        : PhaseRes =
-        let (optEnvFinalSimplify, file, _, _), _ =
-            Optimizer.OptimizeImplFile(
-                phase2And3Settings,
-                ccu,
-                tcGlobals,
-                tcVal,
-                importMap,
-                prevFile.OptEnvFinalSimplify,
-                isIncrementalFragment,
-                tcConfig.fsiMultiAssemblyEmit,
-                tcConfig.emitTailcalls,
-                prevPhase.FirstLoopRes.HidingInfo,
-                file
-            )
-
-        file,
-        { prevPhase with
             OptEnvFinalSimplify = optEnvFinalSimplify
         }
 
-    if tcConfig.doFinalSimplify then
-        addPhase "FinalSimplify" finalSimplify
+    addPhase "firstLoop" firstLoop
 
     let phases = phases.ToArray()
 
