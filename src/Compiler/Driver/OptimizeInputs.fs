@@ -4,6 +4,7 @@ module internal FSharp.Compiler.OptimizeInputs
 
 open System.Collections.Generic
 open System.IO
+open System.Threading
 open System.Threading.Tasks
 open Internal.Utilities.Library
 open FSharp.Compiler
@@ -171,7 +172,7 @@ module private ParallelOptimization =
                 let prevPhaseTask =
                     if node.Phase > 0 then
                         task {
-                            do! Task.Yield()
+                            // do! Task.Yield()
                             return! getTask prevPhaseNode
                         }
                     else
@@ -181,16 +182,18 @@ module private ParallelOptimization =
                 let prevFileTask =
                     if node.FileIdx > 0 then
                         task {
-                            do! Task.Yield()
+                            // do! Task.Yield()
                             return! getTask prevFileNode
                         }
                     else
                         // We don't use the file result in this case, but we need something, so just take the first input file as a placeholder.
                         (files[0], initialState) |> Task.FromResult
 
-                let! results = [| prevPhaseTask; prevFileTask |] |> Task.WhenAll
-                let prevPhaseFile, prevPhaseRes = results[0]
-                let _prevFileFile, prevFileRes = results[1]
+                prevPhaseTask.GetAwaiter().GetResult() |> ignore
+                prevFileTask.GetAwaiter().GetResult() |> ignore
+                // let! results = [| prevPhaseTask; prevFileTask |] |> Task.WhenAll
+                let prevPhaseFile, prevPhaseRes = prevPhaseTask.Result// results[0]
+                let _prevFileFile, prevFileRes = prevFileTask.Result//results[1]
 
                 let inputs =
                     {
@@ -205,14 +208,18 @@ module private ParallelOptimization =
 
         let startNodeTask (phase: PhaseInfo) (node: Node) =
             task {
-                do! Task.Yield()
-                let! inputs = getNodeInputs node
+                // do! Task.Yield()
+                // let! inputs = getNodeInputs node
+                let inputs = (getNodeInputs node).GetAwaiter().GetResult()
+                printfn $"{Thread.CurrentThread.ManagedThreadId} - run {node}"
                 let res = phase.Func inputs
                 return res
             }
 
         let fileIndices = [| 0 .. files.Length - 1 |]
 
+        printfn $"{Thread.CurrentThread.ManagedThreadId} - create tasks"
+        
         for fileIdx in fileIndices do
             for phase in phases do
                 let node =
@@ -224,6 +231,7 @@ module private ParallelOptimization =
                 let task = startNodeTask phase node
                 setTask node task
 
+        printfn $"{Thread.CurrentThread.ManagedThreadId} - created"
         let lastPhaseResultsTask =
             let lastPhaseIndex = phases[phases.Length - 1].Phase.Idx
 
@@ -236,6 +244,7 @@ module private ParallelOptimization =
                     })
             |> Task.WhenAll
 
+        printfn $"{Thread.CurrentThread.ManagedThreadId} - after when all"
         let lastPhaseResults =
             try
                 lastPhaseResultsTask.GetAwaiter().GetResult()
@@ -243,7 +252,9 @@ module private ParallelOptimization =
             with :? System.AggregateException as ex when ex.InnerExceptions.Count > 0 ->
                 raise ex.InnerExceptions[0]
 
-        collectFinalResults lastPhaseResults
+        let res = collectFinalResults lastPhaseResults
+        printfn $"{Thread.CurrentThread.ManagedThreadId} - end"
+        res
 
 let optimizeFilesSequentially optEnv (phases: PhaseInfo[]) implFiles =
     let results, (optEnvFirstLoop, _, _, _) =
@@ -517,7 +528,7 @@ let ApplyAllOptimizations
     let results, optEnvFirstLoop =
         match tcConfig.optSettings.processingMode with
         // Parallel optimization breaks determinism - turn it off in deterministic builds.
-        | Optimizer.OptimizationProcessingMode.Parallel when (not tcConfig.deterministic) ->
+        | Optimizer.OptimizationProcessingMode.Parallel (*when (not tcConfig.deterministic)*) ->
             let results, optEnvFirstPhase = ParallelOptimization.optimizeFilesInParallel optEnv phases implFiles
             results |> Array.toList, optEnvFirstPhase
         | Optimizer.OptimizationProcessingMode.Parallel
