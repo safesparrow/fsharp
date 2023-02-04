@@ -199,6 +199,7 @@
     <None Include="TypeChecks\Graph\scrape.fsx" />
     <Compile Include="TypeChecks\Graph\CompilationFromCmdlineArgsTests.fs" />
     <Compile Include="TypeChecks\Graph\TypedTreeGraph.fs" />
+    <Compile Include="TypeChecks\Graph\GraphTests.fs" />
     <Compile Include="CompilerOptions\fsc\checked\checked.fs" />
     <Compile Include="CompilerOptions\fsc\cliversion.fs" />
     <Compile Include="CompilerOptions\fsc\debug.fs" />

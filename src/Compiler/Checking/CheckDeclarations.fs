@@ -3028,6 +3028,9 @@ module EstablishTypeDefinitionCores =
                     let kind = if hasMeasureAttr then TyparKind.Measure else TyparKind.Type
                     let ty, _ = TcTypeOrMeasureAndRecover (Some kind) cenv NoNewTypars checkConstraints ItemOccurence.UseInType WarnOnIWSAM.No envinner tpenv rhsType
 
+                    // Warn when the type being abbreviated is the AutoOpenAttribute.
+                    // This is because graph-based type-checking assumes that it is not,
+                    // and breaking this assumption breaks the dependency analysis.
                     match ty with
                     | AppTy g (tcref, _) when not tcref.IsErased ->
                         match tcref.CompiledRepresentation with

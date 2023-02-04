@@ -82,10 +82,10 @@ let rec processStateEntry (queryTrie: QueryTrie) (state: FileContentQueryState) 
     | FileContentEntry.PrefixedIdentifier path ->
         match path with
         | [] ->
-            // should not be possible though
+            // This should not happen - return state intact.
             state
         | _ ->
-            // path could consist out of multiple segments
+            // Process every prefix of the multi-part path.
             (state, [| 1 .. path.Length |])
             ||> Array.fold (fun state takeParts ->
                 let path = List.take takeParts path

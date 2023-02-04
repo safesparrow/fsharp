@@ -12,11 +12,6 @@ open FSharp.Compiler.IO
 type internal Graph<'Node> = IReadOnlyDictionary<'Node, 'Node[]>
 
 module internal Graph =
-    let memoize<'a, 'b when 'a: equality> f : ('a -> 'b) =
-        let y = HashIdentity.Structural<'a>
-        let d = new ConcurrentDictionary<'a, 'b>(y)
-        fun x -> d.GetOrAdd(x, (fun r -> f r))
-
     let make (nodeDeps: ('Node * 'Node[]) seq) = nodeDeps |> readOnlyDict
 
     let map (f: 'a -> 'b) (graph: Graph<'a>) : Graph<'b> =

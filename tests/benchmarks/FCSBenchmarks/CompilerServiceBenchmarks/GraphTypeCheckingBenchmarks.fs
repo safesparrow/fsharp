@@ -46,6 +46,7 @@ type GraphTypeCheckingBenchmarks() =
                     ]
                 OtherOptions =
                     [
+                        "--deterministic-"
                         if this.GraphTypeChecking then
                             "--test:GraphBasedChecking"
                     ]
@@ -68,6 +69,7 @@ type GraphTypeCheckingBenchmarks() =
                     ]
                 OtherOptions =
                     [
+                        "--deterministic-"
                         if this.GraphTypeChecking then
                             "--test:GraphBasedChecking"
                     ]

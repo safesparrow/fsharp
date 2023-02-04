@@ -13,7 +13,8 @@ type Method =
 let methodOptions (method: Method) =
     match method with
     | Method.Sequential -> []
-    | Method.Graph -> [ "--test:GraphBasedChecking"; "--test:DumpCheckingGraph" ]
+    // We need to disable deterministic builds as graph-based checking auto-disables otherwise.
+    | Method.Graph -> [ "--test:GraphBasedChecking"; "--test:DumpCheckingGraph"; "--deterministic-" ]
 
 let withMethod (method: Method) (cu: CompilationUnit) : CompilationUnit =
     match cu with
