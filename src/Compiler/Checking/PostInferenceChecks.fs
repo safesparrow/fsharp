@@ -298,7 +298,14 @@ let LimitVal cenv (v: Val) limit =
     if not v.IgnoresByrefScope then
         cenv.limitVals[v.Stamp] <- limit
 
-let BindVal cenv env (v: Val) = 
+let mutable _debugAction = fun (_ : string) -> ()
+let mutable doDebug = false
+let debugAction x = if doDebug then _debugAction x 
+
+let BindVal cenv env (v: Val) =
+    if v.Range.Start.Line >= 3400 then
+        doDebug <- true
+        debugAction $"Start of BindVal - range {v.Range} - name {v.DisplayName}"
     //printfn "binding %s..." v.DisplayName
     let alreadyDone = cenv.boundVals.ContainsKey v.Stamp
     cenv.boundVals[v.Stamp] <- 1
@@ -326,6 +333,9 @@ let BindVal cenv env (v: Val) =
             warning (Error(FSComp.SR.chkUnusedThisVariable v.DisplayName, v.Range))
         else
             warning (Error(FSComp.SR.chkUnusedValue v.DisplayName, v.Range))
+    
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"End of BindVal - range {v.Range} - name {v.DisplayName}"
 
 let BindVals cenv env vs = List.iter (BindVal cenv env) vs
 
@@ -338,6 +348,10 @@ let RecordAnonRecdInfo cenv (anonInfo: AnonRecdTypeInfo) =
 //--------------------------------------------------------------------------
 
 let rec CheckTypeDeep (cenv: cenv) (visitTy, visitTyconRefOpt, visitAppTyOpt, visitTraitSolutionOpt, visitTyparOpt as f) (g: TcGlobals) env isInner ty =
+    let log name =
+        debugAction $"CheckTypeDeep {name}"
+    
+    log "start"
     // We iterate the _solved_ constraints as well, to pick up any record of trait constraint solutions
     // This means we walk _all_ the constraints _everywhere_ in a type, including
     // those attached to _solved_ type variables. This is used by PostTypeCheckSemanticChecks to detect uses of
@@ -364,7 +378,9 @@ let rec CheckTypeDeep (cenv: cenv) (visitTy, visitTyconRefOpt, visitAppTyOpt, vi
             | _ -> stripTyEqns g ty
         else 
             stripTyEqns g ty
+    log "visitTy"
     visitTy ty
+    log "match ty"
 
     match ty with
     | TType_forall (tps, body) -> 
@@ -401,8 +417,11 @@ let rec CheckTypeDeep (cenv: cenv) (visitTy, visitTyconRefOpt, visitAppTyOpt, vi
         CheckTypesDeep cenv f g env tys
 
     | TType_fun (s, t, _) ->
+        log "fun"
         CheckTypeDeep cenv f g env true s
+        log "after s"
         CheckTypeDeep cenv f g env true t
+        log "after t"
 
     | TType_var (tp, _) -> 
           if not tp.IsSolved then 
@@ -410,6 +429,8 @@ let rec CheckTypeDeep (cenv: cenv) (visitTy, visitTyconRefOpt, visitAppTyOpt, vi
               | None -> ()
               | Some visitTyar -> 
                     visitTyar (env, tp)
+    
+    log "end"
 
 and CheckTypesDeep cenv f g env tys = 
     for ty in tys do
@@ -775,8 +796,11 @@ let rec CheckExprNoByrefs cenv env expr =
     CheckExpr cenv env expr PermitByRefExpr.No |> ignore
 
 /// Check a value
-and CheckValRef (cenv: cenv) (env: env) v m (ctxt: PermitByRefExpr) = 
-
+and CheckValRef (cenv: cenv) (env: env) (v : ValRef) m (ctxt: PermitByRefExpr) = 
+    let f name =
+        if v.DisplayName.ToLower().Contains("reportwarnings") then
+            debugAction $"CheckValUse {v.DisplayName} - {name}"
+    f "start"
     if cenv.reportErrors then 
         if isSpliceOperator cenv.g v && not env.quote then errorR(Error(FSComp.SR.chkSplicingOnlyInQuotations(), m))
         if isSpliceOperator cenv.g v then errorR(Error(FSComp.SR.chkNoFirstClassSplicing(), m))
@@ -793,20 +817,29 @@ and CheckValRef (cenv: cenv) (env: env) v m (ctxt: PermitByRefExpr) =
         if ctxt.Disallow && isByrefLikeTy cenv.g m v.Type then 
             errorR(Error(FSComp.SR.chkNoByrefAtThisPoint(v.DisplayName), m))
 
+    f "if env.isIn"
     if env.isInAppExpr then
+        f "CheckTypePermit"
         CheckTypePermitAllByrefs cenv env m v.Type // we do checks for byrefs elsewhere
     else
+        f "CheckTypeNoInner"
         CheckTypeNoInnerByrefs cenv env m v.Type
 
 /// Check a use of a value
 and CheckValUse (cenv: cenv) (env: env) (vref: ValRef, vFlags, m) (ctxt: PermitByRefExpr) = 
-        
+    let f name =
+        if vref.DisplayName.ToLower().Contains("reportwarnings") then
+            debugAction $"CheckValUse {vref.DisplayName} - {name}"
+    
+    f "start"
+    
     let g = cenv.g
 
     let limit = GetLimitVal cenv env m vref.Deref
 
     if cenv.reportErrors then 
 
+        f "isBaseVal"
         if vref.IsBaseVal then 
             errorR(Error(FSComp.SR.chkLimitationsOfBaseKeyword(), m))
 
@@ -815,6 +848,7 @@ and CheckValUse (cenv: cenv) (env: env) (vref: ValRef, vFlags, m) (ctxt: PermitB
             vref.IsConstructor && 
             (match vref.TryDeclaringEntity with Parent tcref -> isAbstractTycon tcref.Deref | _ -> false)
 
+        f "isCallof"
         if isCallOfConstructorOfAbstractType then 
             errorR(Error(FSComp.SR.tcAbstractTypeCannotBeInstantiated(), m))
 
@@ -827,6 +861,7 @@ and CheckValUse (cenv: cenv) (env: env) (vref: ValRef, vFlags, m) (ctxt: PermitB
             ((HasLimitFlag LimitFlags.ByRef limit && IsLimitEscapingScope env ctxt limit) ||
              HasLimitFlag LimitFlags.StackReferringSpanLike limit)
 
+        f "isReturnExpr"
         if isReturnExprBuiltUsingStackReferringByRefLike then
             let isSpanLike = isSpanLikeTy g m vref.Type
             let isCompGen = vref.IsCompilerGenerated
@@ -844,7 +879,9 @@ and CheckValUse (cenv: cenv) (env: env) (vref: ValRef, vFlags, m) (ctxt: PermitB
         if isReturnOfStructThis then
             errorR(Error(FSComp.SR.chkStructsMayNotReturnAddressesOfContents(), m))
 
+    f "CheckValRef"
     CheckValRef cenv env vref m ctxt
+    f "END"
 
     limit
     
@@ -1116,8 +1153,9 @@ and TryCheckResumableCodeConstructs cenv env expr : bool =
             false
 
 /// Check an expression, given information about the position of the expression
-and CheckExpr (cenv: cenv) (env: env) origExpr (ctxt: PermitByRefExpr) : Limit =    
-    
+and CheckExpr (cenv: cenv) (env: env) origExpr (ctxt: PermitByRefExpr) : Limit =
+    if origExpr.Range.Start.Line >= 3400 then
+        debugAction "CheckExpr START"
     // Guard the stack for deeply nested expressions
     cenv.stackGuard.Guard <| fun () ->
     
@@ -1225,6 +1263,11 @@ and CheckExpr (cenv: cenv) (env: env) origExpr (ctxt: PermitByRefExpr) : Limit =
 
     | Expr.Link _ -> 
         failwith "Unexpected reclink"
+        
+    |> fun x ->
+        if origExpr.Range.Start.Line >= 3400 then
+            debugAction "CheckExpr END"
+        x
 
 and CheckQuoteExpr cenv env (ast, savedConv, m, ty) =
     let g = cenv.g
@@ -1704,25 +1747,39 @@ and CheckExprOp cenv env (op, tyargs, args, m) ctxt expr =
         CheckExprsNoByRefLike cenv env args 
 
 and CheckLambdas isTop (memberVal: Val option) cenv env inlined valReprInfo alwaysCheckNoReraise expr mOrig ety ctxt =
+    
+    let f (name : string) =
+        if (memberVal |> Option.map (fun x -> x.Range.Start.Line >= 3400) |> Option.defaultValue true) then
+            debugAction $"CheckLambdas {name}"
+        
+    f $"START"
+    
     let g = cenv.g
     let memInfo = memberVal |> Option.bind (fun v -> v.MemberInfo)
 
+    f "after memInfo"
     // The valReprInfo here says we are _guaranteeing_ to compile a function value 
     // as a .NET method with precisely the corresponding argument counts. 
     match stripDebugPoints expr with
     | Expr.TyChoose (tps, e1, m)  -> 
         let env = BindTypars g env tps
-        CheckLambdas isTop memberVal cenv env inlined valReprInfo alwaysCheckNoReraise e1 m ety ctxt
-
+        let res = CheckLambdas isTop memberVal cenv env inlined valReprInfo alwaysCheckNoReraise e1 m ety ctxt
+        if (memberVal |> Option.map (fun x -> x.Range.Start.Line >= 3400) |> Option.defaultValue true) then
+            debugAction $"CheckLambdas MID"
+        res
     | Expr.Lambda (_, _, _, _, _, m, _)  
     | Expr.TyLambda (_, _, _, m, _) ->
+        f "after tylambda"
         let tps, ctorThisValOpt, baseValOpt, vsl, body, bodyTy = destLambdaWithValReprInfo g cenv.amap valReprInfo (expr, ety)
-        let env = BindTypars g env tps 
+        f "let env = bindtypars"
+        let env = BindTypars g env tps
+        f "ctorthisvalopt" 
         let thisAndBase = Option.toList ctorThisValOpt @ Option.toList baseValOpt
         let restArgs = List.concat vsl
         let syntacticArgs = thisAndBase @ restArgs
         let env = BindArgVals env restArgs
 
+        f "env = bindargvals"
         match memInfo with 
         | None -> ()
         | Some mi -> 
@@ -1737,12 +1794,15 @@ and CheckLambdas isTop (memberVal: Val option) cenv env inlined valReprInfo alwa
                 if isByrefTy g arg.Type then
                     arg.SetHasBeenReferenced()
 
+        f "let permitByRefType"
+        
         let permitByRefType =
             if isTop then
                 PermitByRefType.NoInnerByRefLike
             else
                 PermitByRefType.None
 
+        f "check argument types"
         // Check argument types
         for arg in syntacticArgs do
             if arg.InlineIfLambda && (not inlined || not (isFunTy g arg.Type || isFSharpDelegateTy g arg.Type)) then 
@@ -1755,35 +1815,45 @@ and CheckLambdas isTop (memberVal: Val option) cenv env inlined valReprInfo alwa
                     errorR(Error(FSComp.SR.chkInvalidFunctionParameterType(arg.DisplayName, NicePrint.minimalStringOfType cenv.denv arg.Type), arg.Range))
             )
 
+        f "check return type"
         // Check return type
         CheckTypeAux permitByRefType cenv env mOrig bodyTy (fun () ->
             errorR(Error(FSComp.SR.chkInvalidFunctionReturnType(NicePrint.minimalStringOfType cenv.denv bodyTy), mOrig))
         )
 
+        f "for arg in ..."
         for arg in syntacticArgs do
             BindVal cenv env arg
 
+        f "check escapes"
         // Check escapes in the body.  Allow access to protected things within members.
         let freesOpt = CheckEscapes cenv memInfo.IsSome m syntacticArgs body
 
+        f "check no reraise"
         //  no reraise under lambda expression
         CheckNoReraise cenv freesOpt body 
 
+        f "check the body"
         // Check the body of the lambda
         if isTop && not g.compilingFSharpCore && isByrefLikeTy g m bodyTy then
             // allow byref to occur as return position for byref-typed top level function or method
+            f "check expr permit"
             CheckExprPermitReturnableByRef cenv env body |> ignore
         else
+            f "check expr no byrefs"
             CheckExprNoByrefs cenv env body
 
+        f "check byref return types"
         // Check byref return types
         if cenv.reportErrors then 
             if not isTop then
+                f "CheckForByrefLikeType"
                 CheckForByrefLikeType cenv env m bodyTy (fun () -> 
                         errorR(Error(FSComp.SR.chkFirstClassFuncNoByref(), m)))
 
             elif not g.compilingFSharpCore && isByrefTy g bodyTy then 
                 // check no byrefs-in-the-byref
+                f "CheckForByrefType"
                 CheckForByrefType cenv env (destByrefTy g bodyTy) (fun () -> 
                     errorR(Error(FSComp.SR.chkReturnTypeNoByref(), m)))
 
@@ -1791,6 +1861,8 @@ and CheckLambdas isTop (memberVal: Val option) cenv env inlined valReprInfo alwa
                 if tp.Constraints |> List.sumBy (function TyparConstraint.CoercesTo(ty, _) when isClassTy g ty -> 1 | _ -> 0) > 1 then 
                     errorR(Error(FSComp.SR.chkTyparMultipleClassConstraints(), m))
 
+        f "END"
+        
         NoLimit
                 
     // This path is for expression bindings that are not actually lambdas
@@ -1977,6 +2049,8 @@ and AdjustAccess isHidden (cpath: unit -> CompilationPath) access =
         access
 
 and CheckBinding cenv env alwaysCheckNoReraise ctxt (TBind(v, bindRhs, _) as bind) : Limit =
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"CheckBinding START {v.Range}"
     let vref = mkLocalValRef v
     let g = cenv.g
     let isTop = Option.isSome bind.Var.ValReprInfo
@@ -1984,6 +2058,8 @@ and CheckBinding cenv env alwaysCheckNoReraise ctxt (TBind(v, bindRhs, _) as bin
 
     let env = { env with external = env.external || g.attrib_DllImportAttribute |> Option.exists (fun attr -> HasFSharpAttribute g attr v.Attribs) }
 
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"CheckBinding 1.6 {v.Range}"
     // Check that active patterns don't have free type variables in their result
     match TryGetActivePatternInfo vref with 
     | Some _apinfo when _apinfo.ActiveTags.Length > 1 -> 
@@ -1991,21 +2067,29 @@ and CheckBinding cenv env alwaysCheckNoReraise ctxt (TBind(v, bindRhs, _) as bin
            errorR(Error(FSComp.SR.activePatternChoiceHasFreeTypars(v.LogicalName), v.Range))
     | _ -> ()
     
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"CheckBinding 1.7 {v.Range}"
     match cenv.potentialUnboundUsesOfVals.TryFind v.Stamp with
     | None -> () 
     | Some m ->
          let nm = v.DisplayName
          errorR(Error(FSComp.SR.chkMemberUsedInInvalidWay(nm, nm, stringOfRange m), v.Range))
 
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"CheckBinding 1.8 {v.Range}"
     v.Type |> CheckTypePermitAllByrefs cenv env v.Range
     v.Attribs |> CheckAttribs cenv env
     v.ValReprInfo |> Option.iter (CheckValInfo cenv env)
 
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"CheckBinding 1.9 {v.Range}"
     // Check accessibility
     if (v.IsMemberOrModuleBinding || v.IsMember) && not v.IsIncrClassGeneratedMember then 
         let access =  AdjustAccess (IsHiddenVal env.sigToImplRemapInfo v) (fun () -> v.DeclaringEntity.CompilationPath) v.Accessibility
         CheckTypeForAccess cenv env (fun () -> NicePrint.stringOfQualifiedValOrMember cenv.denv cenv.infoReader vref) access v.Range v.Type
     
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"CheckBinding 2 {v.Range}"
     if cenv.reportErrors  then 
 
         // Check top-level let-bound values
@@ -2055,7 +2139,11 @@ and CheckBinding cenv env alwaysCheckNoReraise ctxt (TBind(v, bindRhs, _) as bin
                 with 
                   | QuotationTranslator.InvalidQuotedTerm e -> 
                           errorR e
-            
+    
+    
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"CheckBinding 3 {v.Range}"
+    
     match v.MemberInfo with 
     | Some memberInfo when not v.IsIncrClassGeneratedMember -> 
         match memberInfo.MemberFlags.MemberKind with 
@@ -2070,6 +2158,8 @@ and CheckBinding cenv env alwaysCheckNoReraise ctxt (TBind(v, bindRhs, _) as bin
         
     let valReprInfo  = match bind.Var.ValReprInfo with Some info -> info | _ -> ValReprInfo.emptyValData 
 
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"CheckBinding 4 {v.Range}"
     // If the method has ResumableCode argument or return type it must be inline
     // unless warning is suppressed (user must know what they're doing).
     //
@@ -2086,7 +2176,16 @@ and CheckBinding cenv env alwaysCheckNoReraise ctxt (TBind(v, bindRhs, _) as bin
         else
             env
 
-    CheckLambdas isTop (Some v) cenv env v.MustInline valReprInfo alwaysCheckNoReraise bindRhs v.Range v.Type ctxt
+    
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"CheckBinding 5 {v.Range}"
+    
+    let res = CheckLambdas isTop (Some v) cenv env v.MustInline valReprInfo alwaysCheckNoReraise bindRhs v.Range v.Type ctxt
+    
+    if v.Range.Start.Line >= 3400 then
+        debugAction $"CheckBinding END {v.Range}"
+        
+    res
 
 and CheckBindings cenv env binds = 
     for bind in binds do
@@ -2094,6 +2193,7 @@ and CheckBindings cenv env binds =
 
 // Top binds introduce expression, check they are reraise free.
 let CheckModuleBinding cenv env (TBind(v, e, _) as bind) =
+    debugAction $"CheckModuleBinding - range {v.Range}"
     let g = cenv.g
     let isExplicitEntryPoint = HasFSharpAttribute g g.attrib_EntryPointAttribute v.Attribs
     if isExplicitEntryPoint then 
@@ -2216,8 +2316,9 @@ let CheckModuleBinding cenv env (TBind(v, e, _) as bind) =
             | None -> ()
         with e -> errorRecovery e v.Range 
     end
-
+    debugAction $"CheckModuleBinding almost END - range {v.Range}"
     CheckBinding cenv { env with returnScope = 1 } true PermitByRefExpr.Yes bind |> ignore
+    debugAction $"CheckModuleBinding END - range {v.Range}"
 
 //--------------------------------------------------------------------------
 // check tycons
@@ -2557,21 +2658,23 @@ let CheckEntityDefns cenv env tycons =
 // check modules
 //--------------------------------------------------------------------------
 
-let rec CheckDefnsInModule cenv env mdefs = 
+let rec CheckDefnsInModule cenv env action mdefs = 
     for mdef in mdefs do
-        CheckDefnInModule cenv env mdef
+        CheckDefnInModule cenv env action mdef
 
 and CheckNothingAfterEntryPoint cenv m =
+    debugAction $"CheckNothingAfterEntryPoint - range {m}"
     if cenv.entryPointGiven && cenv.reportErrors then 
         errorR(Error(FSComp.SR.chkEntryPointUsage(), m)) 
 
-and CheckDefnInModule cenv env mdef = 
+and CheckDefnInModule cenv env (action : string -> unit) mdef =
+    action $"CheckDefnInModule start"
     match mdef with 
-    | TMDefRec(isRec, _opens, tycons, mspecs, m) -> 
+    | TMDefRec(isRec, _opens, tycons, mspecs, m) ->
         CheckNothingAfterEntryPoint cenv m
         if isRec then BindVals cenv env (allValsOfModDef mdef |> Seq.toList)
         CheckEntityDefns cenv env tycons
-        List.iter (CheckModuleSpec cenv env) mspecs
+        List.iter (CheckModuleSpec cenv env action) mspecs
     | TMDefLet(bind, m)  -> 
         CheckNothingAfterEntryPoint cenv m
         CheckModuleBinding cenv env bind 
@@ -2582,9 +2685,10 @@ and CheckDefnInModule cenv env mdef =
         CheckNothingAfterEntryPoint cenv m
         CheckNoReraise cenv None e
         CheckExprNoByrefs cenv env e
-    | TMDefs defs -> CheckDefnsInModule cenv env defs 
+    | TMDefs defs -> CheckDefnsInModule cenv env action defs
+    action $"CheckDefnInModule end"
 
-and CheckModuleSpec cenv env mbind =
+and CheckModuleSpec cenv env action mbind  =
     match mbind with 
     | ModuleOrNamespaceBinding.Binding bind ->
         BindVals cenv env (valsOfBinds [bind])
@@ -2592,14 +2696,18 @@ and CheckModuleSpec cenv env mbind =
     | ModuleOrNamespaceBinding.Module (mspec, rhs) ->
         CheckEntityDefn cenv env mspec
         let env = { env with reflect = env.reflect || HasFSharpAttribute cenv.g cenv.g.attrib_ReflectedDefinitionAttribute mspec.Attribs }
-        CheckDefnInModule cenv env rhs 
+        CheckDefnInModule cenv env action rhs
 
-let CheckImplFileContents cenv env implFileTy implFileContents  = 
+let CheckImplFileContents cenv env implFileTy implFileContents (action : string -> unit) =
+    action "checkImplFileContents 1"
     let rpi, mhi = ComputeRemappingFromImplementationToSignature cenv.g implFileContents implFileTy
+    action "checkImplFileContents 2"
     let env = { env with sigToImplRemapInfo = (mkRepackageRemapping rpi, mhi) :: env.sigToImplRemapInfo }
-    CheckDefnInModule cenv env implFileContents
+    action "checkImplFileContents 3"
+    CheckDefnInModule cenv env action implFileContents
+    action "checkImplFileContents 4"
     
-let CheckImplFile (g, amap, reportErrors, infoReader, internalsVisibleToPaths, viewCcu, tcValF, denv, implFileTy, implFileContents, extraAttribs, isLastCompiland: bool*bool, isInternalTestSpanStackReferring) =
+let CheckImplFile (g, amap, reportErrors, infoReader, internalsVisibleToPaths, viewCcu, tcValF, denv, implFileTy, implFileContents, extraAttribs, isLastCompiland: bool*bool, isInternalTestSpanStackReferring, (action: string -> unit)) =
     let cenv = 
         { g = g  
           reportErrors = reportErrors 
@@ -2618,18 +2726,22 @@ let CheckImplFile (g, amap, reportErrors, infoReader, internalsVisibleToPaths, v
           isInternalTestSpanStackReferring = isInternalTestSpanStackReferring
           tcVal = tcValF
           entryPointGiven = false}
-    
+    action "after cenv"
     // Certain type equality checks go faster if these TyconRefs are pre-resolved.
     // This is because pre-resolving allows tycon equality to be determined by pointer equality on the entities.
     // See primEntityRefEq.
     g.system_Void_tcref.TryDeref |> ignore
+    action "after tryderef1"
     g.byref_tcr.TryDeref |> ignore
-
+    action "after tryderef2"
     let resolve = function Some(tcref : TyconRef) -> ignore(tcref.TryDeref) | _ -> ()
     resolve g.system_TypedReference_tcref
+    action "after resolve1"
     resolve g.system_ArgIterator_tcref
+    action "after resolve2"
     resolve g.system_RuntimeArgumentHandle_tcref
-
+    action "after resolve3"
+    
     let env = 
         { sigToImplRemapInfo=[]
           quote=false
@@ -2642,10 +2754,13 @@ let CheckImplFile (g, amap, reportErrors, infoReader, internalsVisibleToPaths, v
           isInAppExpr = false
           resumableCode = Resumable.None }
 
-    CheckImplFileContents cenv env implFileTy implFileContents
+    CheckImplFileContents cenv env implFileTy implFileContents action
+    action "after checkImplFileContents"
     CheckAttribs cenv env extraAttribs
 
+    action "after checkAttribs"
     if cenv.usesQuotations && not (QuotationTranslator.QuotationGenerationScope.ComputeQuotationFormat(g).SupportsDeserializeEx) then 
         viewCcu.UsesFSharp20PlusQuotations <- true
 
+    action "after end"
     cenv.entryPointGiven, cenv.anonRecdTypes

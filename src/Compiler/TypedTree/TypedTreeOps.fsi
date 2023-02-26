@@ -2696,5 +2696,17 @@ val (|EmptyModuleOrNamespaces|_|):
 val tryAddExtensionAttributeIfNotAlreadyPresent:
     tryFindExtensionAttributeIn: ((Attrib list -> Attrib option) -> Attrib option) -> entity: Entity -> Entity
 
+
+type TypedTreeNode =
+    {
+        Kind: string
+        Name: string
+        Children: TypedTreeNode list
+    }
+
+val visitEntity : entity: Entity -> TypedTreeNode
+
+val visitVal : v: Val -> TypedTreeNode
+
 /// Serialize an entity to a very basic json structure.
 val serializeEntity: path: string -> entity: Entity -> unit

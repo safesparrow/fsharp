@@ -588,7 +588,7 @@ let ImportILAssemblyTypeDefs (amap, m, auxModLoader, aref, mainmod: ILModuleDef)
 
 /// Import the type forwarder table for an IL assembly
 let ImportILAssemblyTypeForwarders (amap, m, exportedTypes: ILExportedTypesAndForwarders): CcuTypeForwarderTable =            
-    let rec addToTree tree path item value =
+    let rec addToTree (tree : CcuTypeForwarderTree) path item value =
         match path with
         | [] ->
             { tree with

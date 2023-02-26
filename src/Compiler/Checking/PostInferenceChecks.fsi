@@ -24,5 +24,8 @@ val CheckImplFile:
     implFileContents: ModuleOrNamespaceContents *
     extraAttribs: Attribs *
     (bool * bool) *
-    isInternalTestSpanStackReferring: bool ->
+    isInternalTestSpanStackReferring: bool *
+    (string -> unit) ->
         bool * StampMap<AnonRecdTypeInfo>
+
+val mutable _debugAction : (string -> unit)

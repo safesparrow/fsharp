@@ -5367,11 +5367,12 @@ let CheckOneImplFile
         env,
         rootSigOpt: ModuleOrNamespaceType option,
         synImplFile,
-        diagnosticOptions) =
+        diagnosticOptions, (action : string -> unit)) =
 
     let (ParsedImplFileInput (fileName, isScript, qualNameOfFile, scopedPragmas, _, implFileFrags, isLastCompiland, _, _)) = synImplFile
     let infoReader = InfoReader(g, amap)
 
+    action "start"
     cancellable {
         use _ =
             Activity.start "CheckDeclarations.CheckOneImplFile"
@@ -5389,11 +5390,13 @@ let CheckOneImplFile
                 tcArrayOrListSequenceExpression=TcArrayOrListComputedExpression,
                 tcComputationExpression=TcComputationExpression)    
 
+        action "after cenv_create"
         let envinner, moduleTyAcc = MakeInitialEnv env 
 
         let defs = [ for x in implFileFrags -> SynModuleDecl.NamespaceFragment x ]
         let! moduleContents, topAttrs, envAtEnd = TcModuleOrNamespaceElements cenv ParentNone qualNameOfFile.Range envinner PreXmlDoc.Empty None openDecls0 defs
 
+        action "after modulecontents"
         let implFileTypePriorToSig = moduleTyAcc.Value
 
         let topAttrs = 
@@ -5405,6 +5408,7 @@ let CheckOneImplFile
               netModuleAttrs = List.map snd netModuleAttrs
               assemblyAttrs = List.map snd assemblyAttrs}
 
+        action "after topAttrs"
         let denvAtEnd = envAtEnd.DisplayEnv
 
         let m = qualNameOfFile.Range
@@ -5412,6 +5416,7 @@ let CheckOneImplFile
         // This is a fake module spec
         let implFileSpecPriorToSig = wrapModuleOrNamespaceType qualNameOfFile.Id (compPathOfCcu thisCcu) implFileTypePriorToSig
 
+        action "after implFileSpec"
         let extraAttribs = topAttrs.mainMethodAttrs@topAttrs.netModuleAttrs@topAttrs.assemblyAttrs
     
         // Run any additional checks registered to be run before applying defaults
@@ -5421,7 +5426,7 @@ let CheckOneImplFile
                 check()
             with exn -> 
                 errorRecovery exn m
-
+        action "after for_check"
         conditionallySuppressErrorReporting (checkForErrors()) (fun () ->
             ApplyDefaults cenv g denvAtEnd m moduleContents extraAttribs)
 
@@ -5456,7 +5461,7 @@ let CheckOneImplFile
                     check()
                 with exn -> 
                     errorRecovery exn m)
-
+        action "before we always"
         // We ALWAYS run the PostTypeCheckSemanticChecks phase, though we if we have already encountered some
         // errors we turn off error reporting. This is because it performs various fixups over the TAST, e.g. 
         // assigning nice names for inference variables.
@@ -5467,16 +5472,17 @@ let CheckOneImplFile
                 try  
                     let reportErrors = not (checkForErrors())
                     let tcVal = LightweightTcValForUsingInBuildMethodCall g
+                    PostTypeCheckSemanticChecks._debugAction <- action
                     PostTypeCheckSemanticChecks.CheckImplFile 
                        (g, cenv.amap, reportErrors, cenv.infoReader, 
                         env.eInternalsVisibleCompPaths, cenv.thisCcu, tcVal, envAtEnd.DisplayEnv, 
                         implFileTy, implFileContents, extraAttribs, isLastCompiland, 
-                        isInternalTestSpanStackReferring)
+                        isInternalTestSpanStackReferring, action)
 
                 with exn -> 
                     errorRecovery exn m
                     false, StampMap.Empty)
-
+        action "after we always"
         // Warn on version attributes.
         topAttrs.assemblyAttrs |> List.iter (function
            | Attrib(tref, _, [ AttribExpr(Expr.Const (Const.String version, range, _), _) ], _, _, _, _) ->
@@ -5490,15 +5496,15 @@ let CheckOneImplFile
                     warning(Error(FSComp.SR.fscBadAssemblyVersion(attrName, version), range))
                 | _ -> ()
             | _ -> ())
-
+        action "after warn on"
         let namedDebugPointsForInlinedCode =
            cenv.namedDebugPointsForInlinedCode
            |> Seq.toArray
            |> Array.map (fun (KeyValue(k,v)) -> (k,v))
            |> Map
-
+        action "after namedDebug"
         let implFile = CheckedImplFile (qualNameOfFile, scopedPragmas, implFileTy, implFileContents, hasExplicitEntryPoint, isScript, anonRecdTypes, namedDebugPointsForInlinedCode)
-
+        action "before end"
         return (topAttrs, implFile, envAtEnd, cenv.createsGeneratedProvidedTypes)
      } 
    

@@ -10484,6 +10484,7 @@ let tryAddExtensionAttributeIfNotAlreadyPresent
         | None -> entity
         | Some extensionAttrib -> { entity with entity_attribs = extensionAttrib :: entity.Attribs }
 
+[<RequireQualifiedAccess>]
 type TypedTreeNode =
     {
         Kind: string
@@ -10526,18 +10527,18 @@ and visitVal (v: Val) : TypedTreeNode =
                     |> Seq.collect (fun argInfos ->
                         argInfos
                         |> Seq.map (fun argInfo -> {
-                            Name = argInfo.Name |> Option.map (fun i -> i.idText) |> Option.defaultValue ""
-                            Kind = "ArgInfo"
-                            Children = []
+                            TypedTreeNode.Name = argInfo.Name |> Option.map (fun i -> i.idText) |> Option.defaultValue ""
+                            TypedTreeNode.Kind = "ArgInfo"
+                            TypedTreeNode.Children = []
                         })
                     )
 
             yield!
                 v.Typars
                 |> Seq.map (fun typar -> {
-                    Name = typar.Name
-                    Kind = "Typar"
-                    Children = []
+                    TypedTreeNode.Name = typar.Name
+                    TypedTreeNode.Kind = "Typar"
+                    TypedTreeNode.Children = []
                 })
         }
 

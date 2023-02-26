@@ -135,9 +135,51 @@ let PickleToResource inMem file (g: TcGlobals) compress scope rName p x =
 let GetSignatureData (file, ilScopeRef, ilModule, byteReader) : PickledDataWithReferences<PickledCcuInfo> =
     unpickleObjWithDanglingCcus file ilScopeRef ilModule unpickleCcuInfo (byteReader ())
 
+let rec enumerate (node : TypedTreeNode) : TypedTreeNode seq =
+    seq {
+        yield node
+        yield! (node.Children |> Seq.collect enumerate)
+    }
+
+let find (node : TypedTreeNode) (name : string) =
+    node
+    |> enumerate
+    |> Seq.filter (fun n -> n.Name = name)
+    |> Seq.toArray
+
+let findNode (stuff : ModuleOrNamespace) (name : string) =
+    let root = visitEntity stuff
+    find root name
+
+let mutable found = false
+let mutable _i = 0
+let extractMyTypar2 (name : string) (stuff : ModuleOrNamespace) : string =
+    // serializeEntity $"c:/projekty/fsharp/fsharp_scripts/typars_{_i}_{name}.txt" stuff
+    
+    match findNode stuff "ReportWarnings" with
+    | [|single|] ->
+        let typar = (single.Children |> List.find (fun c -> c.Kind = "Typar")).Name
+        let msg = $"[{_i} - {name}] Typar = {typar}"
+        File.AppendAllLines("c:/projekty/fsharp/fsharp_scripts/typars.txt", [|msg|])
+        _i <- _i + 1
+        if typar = "b" && not found then
+            printfn "FOUND"
+            found <- true
+            ()
+        typar
+    | multiple ->
+        printfn $"[{_i} - {name}] Multiple or zero typars found: %+A{multiple}"
+        ""
+        //failwith $"[{_i} - {name}] non-single typar found" 
+
+let extractMyTypar (ccu : CcuThunk) : string =
+    extractMyTypar2 "anon" ccu.Contents
+
 let WriteSignatureData (tcConfig: TcConfig, tcGlobals, exportRemapping, ccu: CcuThunk, fileName, inMem) : ILResource =
     let mspec = ApplyExportRemappingToEntity tcGlobals exportRemapping ccu.Contents
 
+    extractMyTypar2 "After mspec" ccu.Contents |> ignore
+    
     if tcConfig.dumpSignatureData then
         tcConfig.outputFile
         |> Option.iter (fun outputFile ->
@@ -193,7 +235,8 @@ let WriteOptimizationData (tcConfig: TcConfig, tcGlobals, fileName, inMem, ccu: 
 
     PickleToResource inMem fileName tcGlobals compress ccu (rName + ccu.AssemblyName) Optimizer.p_CcuOptimizationInfo modulInfo
 
-let EncodeSignatureData (tcConfig: TcConfig, tcGlobals, exportRemapping, generatedCcu, outfile, isIncrementalBuild) =
+let EncodeSignatureData (tcConfig: TcConfig, tcGlobals, exportRemapping, (generatedCcu : CcuThunk), outfile, isIncrementalBuild) =
+    extractMyTypar2 "EncodeSignatureData" generatedCcu.Contents |> ignore
     if tcConfig.GenerateSignatureData then
         let resource =
             WriteSignatureData(tcConfig, tcGlobals, exportRemapping, generatedCcu, outfile, isIncrementalBuild)

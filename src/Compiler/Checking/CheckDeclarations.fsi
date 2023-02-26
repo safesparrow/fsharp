@@ -60,7 +60,7 @@ val CheckOneImplFile:
     TcEnv *
     ModuleOrNamespaceType option *
     ParsedImplFileInput *
-    FSharpDiagnosticOptions ->
+    FSharpDiagnosticOptions * (string -> unit) ->
         Cancellable<TopAttribs * CheckedImplFile * TcEnv * bool>
 
 val CheckOneSigFile:
