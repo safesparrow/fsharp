@@ -45,9 +45,6 @@ val IsReflectedDefinitionsResource: ILResource -> bool
 
 val GetResourceNameAndSignatureDataFunc: ILResource -> string * (unit -> ReadOnlyByteMemory)
 
-val extractMyTypar : ccu : CcuThunk -> string
-val extractMyTypar2 : name : string -> stuff : ModuleOrNamespace -> string
-
 /// Encode the F# interface data into a set of IL attributes and resources
 val EncodeSignatureData:
     tcConfig: TcConfig *

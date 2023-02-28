@@ -688,7 +688,6 @@ let main1
 
     AbortOnError(diagnosticsLogger, exiter)
     ReportTime tcConfig "Typechecked"
-    extractMyTypar2 "End of main1" tcState.Ccu.Contents  |> ignore
     Args(
         ctok,
         tcGlobals,
@@ -789,8 +788,6 @@ let main2
         let xmlFile = tcConfig.MakePathAbsolute xmlFile
         XmlDocWriter.WriteXmlDocFile(tcGlobals, assemblyName, generatedCcu, xmlFile))
 
-    extractMyTypar2 "After main2" generatedCcu.Contents  |> ignore
-    
     // Pass on only the minimum information required for the next phase
     Args(
         ctok,
@@ -833,7 +830,6 @@ let main3
            exiter: Exiter,
            ilSourceDocs))
     =
-    extractMyTypar2 "main3 start" generatedCcu.Contents |> ignore
     // Encode the signature data
     ReportTime tcConfig "Encode Interface Data"
     let exportRemapping = MakeExportRemapping generatedCcu generatedCcu.Contents

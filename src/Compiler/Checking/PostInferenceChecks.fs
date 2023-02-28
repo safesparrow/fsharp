@@ -111,14 +111,43 @@ let BindTypar env (tp: Typar) =
          boundTyparNames = tp.Name :: env.boundTyparNames
          boundTypars = env.boundTypars.Add (tp, ()) } 
 
+[<Sealed>]
+type PerFileContext<'a>(creator : unit -> 'a) =
+    let context = Dictionary<int, 'a>()
+    [<DefaultValue; ThreadStatic>]
+    static val mutable private file : int option
+    
+    static member SetFile (fileToSet : int) =
+        PerFileContext<'a>.file <- Some fileToSet
+    
+    static member ClearFile () =
+        PerFileContext<'a>.file <- None
+    
+    member this.File = PerFileContext<'a>.file
+    
+    member this.Item =
+        match this.File with
+        | None -> failwith "No file assigned"
+        | Some file ->
+            match context.TryGetValue(file) with
+            | true, item -> item
+            | false, _ ->
+                context[file] <- creator()
+                context[file]
+        
+    member this.Context = context
+        
+let typarIdAssignments = PerFileContext<List<Typar * Ident>>(fun () -> List<Typar * Ident>())
+
 let BindTypars g env (tps: Typar list) = 
     let tps = NormalizeDeclaredTyparsForEquiRecursiveInference g tps
     if isNil tps then env else
     // Here we mutate to provide better names for generalized type parameters 
     let nms = PrettyTypes.PrettyTyparNames (fun _ -> true) env.boundTyparNames tps
-    (tps, nms) ||> List.iter2 (fun tp nm -> 
-            if PrettyTypes.NeedsPrettyTyparName tp  then 
-                tp.typar_id <- ident (nm, tp.Range))      
+    (tps, nms) ||> List.iter2 (fun tp nm ->
+            if PrettyTypes.NeedsPrettyTyparName tp then
+                let id = ident (nm, tp.Range)
+                typarIdAssignments.Item.Add(tp, id))
     List.fold BindTypar env tps 
 
 /// Set the set of vals which are arguments in the active lambda. We are allowed to return 

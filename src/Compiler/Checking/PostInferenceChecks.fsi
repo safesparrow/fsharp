@@ -29,3 +29,13 @@ val CheckImplFile:
         bool * StampMap<AnonRecdTypeInfo>
 
 val mutable _debugAction : (string -> unit)
+
+[<Sealed>]
+type PerFileContext<'a> =
+    static member SetFile : int -> unit    
+    static member ClearFile : unit -> unit
+    member File : int option
+    member Item : 'a
+    member Context : System.Collections.Generic.Dictionary<int, 'a>
+        
+val typarIdAssignments : PerFileContext<System.Collections.Generic.List<Typar * Syntax.Ident>>

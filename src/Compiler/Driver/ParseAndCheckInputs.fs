@@ -1153,11 +1153,6 @@ let AddCheckResultsToTcState
     (tcState: TcState)
     =
     
-    if qualNameOfFile.Text.ToLower().Contains("constraintsolver") then
-        let foo = Construct.NewCcuContents ILScopeRef.Local range0 tcState.tcsCcu.AssemblyName tcState.tcsCcuSig
-        extractMyTypar2 "constraintsolver_start_addcheckresultstotcstate" foo |> ignore
-        ()
-    
     let rootImpls = Zset.add qualNameOfFile tcState.tcsRootImpls
 
     // Only add it to the environment if it didn't have a signature
@@ -1186,17 +1181,8 @@ let AddCheckResultsToTcState
         | Some prefixPath when not hadSig -> TcOpenModuleOrNamespaceDecl tcSink tcGlobals amap m tcSigEnv (prefixPath, m)
         | _ -> tcSigEnv, []
 
-    if qualNameOfFile.Text.ToLower().Contains("constraintsolver") then
-        let foo = Construct.NewCcuContents ILScopeRef.Local range0 tcState.tcsCcu.AssemblyName tcState.tcsCcuSig
-        extractMyTypar2 "constraintsolver_beforecombine" foo |> ignore
-    
     let ccuSigForFile =
         CombineCcuContentFragments [ implFileSigType; tcState.tcsCcuSig ]
-    
-    if qualNameOfFile.Text.ToLower().Contains("constraintsolver") then
-        let foo2 = Construct.NewCcuContents ILScopeRef.Local range0 tcState.tcsCcu.AssemblyName ccuSigForFile
-        CompilerImports.extractMyTypar2 "constraintsolver_aftercombine" foo2 |> ignore
-        ()
     
     let tcState =
         { tcState with
@@ -1210,10 +1196,6 @@ let AddCheckResultsToTcState
     ccuSigForFile, tcState
 
 type PartialResult = TcEnv * TopAttribs * CheckedImplFile option * ModuleOrNamespaceType
-
-let inspectTcState (name : string) (tcState : TcState) =
-    let foo = Construct.NewCcuContents ILScopeRef.Local range0 tcState.tcsCcu.AssemblyName tcState.tcsCcuSig
-    extractMyTypar2 name foo |> ignore
 
 /// Typecheck a single file (or interactive entry into F# Interactive)
 let CheckOneInputAux
@@ -1231,9 +1213,6 @@ let CheckOneInputAux
         
     cancellable {
         try
-            
-            if inp.QualifiedName.Text.ToLower().Contains("constraintsolver") then
-                inspectTcState "constraintsolver_start_CheckoneInputAux" tcState
             
             use _ =
                 Activity.start "ParseAndCheckInputs.CheckOneInput" [| Activity.Tags.fileName, inp.FileName |]
@@ -1330,9 +1309,8 @@ let CheckOneInputAux
                     return Choice2Of2 partialResult, tcState
 
                 | _ ->
-                    let action (name : string) =
-                        if inp.QualifiedName.Text.ToLower().Contains("constraintsolver") then
-                            inspectTcState $"constraintsolver_checkoneimplfile_{name}" tcState
+                    let action (_ : string) =
+                        ()
                             
                     // Typecheck the implementation file
                     let! topAttrs, implFile, tcEnvAtEnd, createsGeneratedProvidedTypes =
@@ -1352,9 +1330,6 @@ let CheckOneInputAux
                             action
                         )
                     
-                    if inp.QualifiedName.Text.ToLower().Contains("constraintsolver") then
-                        inspectTcState "constraintsolver_end_CheckOneImplFile" tcState
-
                     let tcState =
                         { tcState with
                             tcsCreatesGeneratedProvidedTypes = tcState.tcsCreatesGeneratedProvidedTypes || createsGeneratedProvidedTypes
@@ -1364,15 +1339,7 @@ let CheckOneInputAux
                         AddCheckResultsToTcState
                             (tcGlobals, amap, hadSig, prefixPathOpt, tcSink, tcState.tcsTcImplEnv, qualNameOfFile, implFile.Signature)
                             tcState
-                            
-                    if implFile.QualifiedNameOfFile.Text.ToLower().Contains("constraintsolver") then
-                        let foo = Construct.NewCcuContents ILScopeRef.Local range0 tcState.tcsCcu.AssemblyName tcState.tcsCcuSig
-                        CompilerImports.extractMyTypar2 "constraintsolver_before" foo |> ignore
-                        
-                        let foo2 = Construct.NewCcuContents ILScopeRef.Local range0 tcState.tcsCcu.AssemblyName tcState2.tcsCcuSig
-                        CompilerImports.extractMyTypar2 "constraintsolver_after" foo2 |> ignore
-                        ()
-
+                    
                     let result = (tcEnvAtEnd, topAttrs, Some implFile, ccuSigForFile)
                     return Choice1Of2 result, tcState2
 
@@ -1461,8 +1428,6 @@ let CheckMultipleInputsSequential (ctok, checkForErrors, tcConfig, tcImports, tc
     (tcState, inputs)
     ||> List.mapFold (fun state x ->
         let state, partial = CheckOneInputEntry(ctok, checkForErrors, tcConfig, tcImports, tcGlobals, prefixPathOpt, false) state x
-        let foo = Construct.NewCcuContents ILScopeRef.Local range0 tcState.tcsCcu.AssemblyName partial.tcsCcuSig
-        extractMyTypar2 $"TC After file {idx}" foo |> ignore
         idx <- idx+1
         state, partial
     )
@@ -1517,6 +1482,7 @@ let CheckOneInputWithCallback
       inp: ParsedInput,
       _skipImplIfSigExists: bool): (unit -> bool) * TcConfig * TcImports * TcGlobals * LongIdent option * TcResultsSink * TcState * ParsedInput * bool)
     : Cancellable<Finisher<TcState, PartialResult>> =
+    
     cancellable {
         try
             CheckSimulateException tcConfig
@@ -1752,6 +1718,7 @@ let CheckMultipleInputsUsingGraphMode
             let partialResult, nextTcState = f tcState
             partialResult, (nextTcState, currentPriorErrors))
 
+    let r = Random(int DateTime.Now.Ticks)
     let processFile
         ((input, logger): ParsedInput * DiagnosticsLogger)
         ((currentTcState, _currentPriorErrors): State)
@@ -1760,6 +1727,8 @@ let CheckMultipleInputsUsingGraphMode
         let checkForErrors2 () = priorErrors || (logger.ErrorCount > 0)
         let tcSink = TcResultsSink.NoSink
 
+        Thread.Sleep(200 * (r.Next() % 5))
+        
         let finisher =
             CheckOneInputWithCallback(checkForErrors2, tcConfig, tcImports, tcGlobals, prefixPathOpt, tcSink, currentTcState, input, false)
             |> Cancellable.runWithoutCancellation
@@ -1784,9 +1753,11 @@ let CheckMultipleInputsUsingGraphMode
         let processFile (node: NodeToTypeCheck) (state: State) : Finisher<State, PartialResult> =
             match node with
             | NodeToTypeCheck.ArtificialImplFile idx ->
+                PostTypeCheckSemanticChecks.PerFileContext<List<Typar * Ident>>.SetFile(idx)
                 let parsedInput, _ = inputsWithLoggers[idx]
                 processArtificialImplFile parsedInput state
             | NodeToTypeCheck.PhysicalFile idx ->
+                PostTypeCheckSemanticChecks.PerFileContext<List<Typar * Ident>>.SetFile(idx)
                 let parsedInput, logger = inputsWithLoggers[idx]
                 processFile (parsedInput, logger) state
 
@@ -1818,7 +1789,7 @@ let CheckClosedInputSet (ctok, checkForErrors, tcConfig: TcConfig, tcImports, tc
     // tcEnvAtEndOfLastFile is the environment required by fsi.exe when incrementally adding definitions
     let results, tcState =
         match tcConfig.typeCheckingConfig.Mode with
-        | TypeCheckingMode.Graph when (not tcConfig.isInteractive && not tcConfig.deterministic) ->
+        | TypeCheckingMode.Graph when (not tcConfig.isInteractive) ->
             CheckMultipleInputsUsingGraphMode(
                 ctok,
                 checkForErrors,
@@ -1832,16 +1803,11 @@ let CheckClosedInputSet (ctok, checkForErrors, tcConfig: TcConfig, tcImports, tc
             )
         | _ -> CheckMultipleInputsSequential(ctok, checkForErrors, tcConfig, tcImports, tcGlobals, prefixPathOpt, tcState, inputs)
     
-    extractMyTypar2 "AfterInitialTC" tcState.Ccu.Contents  |> ignore
-    
     let (tcEnvAtEndOfLastFile, topAttrs, implFiles, _), tcState =
         CheckMultipleInputsFinish(results, tcState)
 
-    extractMyTypar2 "After CheckMultipleInputsFinish" tcState.Ccu.Contents  |> ignore
-    
     let tcState, declaredImpls, ccuContents =
         CheckClosedInputSetFinish(implFiles, tcState)
         
     tcState.Ccu.Deref.Contents <- ccuContents
-    extractMyTypar2 "after deref assignment" tcState.Ccu.Contents  |> ignore
     tcState, topAttrs, declaredImpls, tcEnvAtEndOfLastFile
