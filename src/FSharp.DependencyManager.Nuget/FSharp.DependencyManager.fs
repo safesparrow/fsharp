@@ -198,7 +198,7 @@ module FSharpDependencyManager =
         |> List.distinct
         |> (fun l -> l, binLogPath, timeout)
 
-    let _computeHashForResolutionInputs
+    let computeHashForResolutionInputs
         (
             scriptExt: string,
             directiveLines: (string * string) seq,
@@ -289,14 +289,14 @@ type ResolveDependenciesResult
     member _.Roots = roots
 
 [<DependencyManager>]
-type FSharpDependencyManager(outputDirectory: string option, _useResultsCache: bool) =
+type FSharpDependencyManager(outputDirectory: string option, useResultsCache: bool) =
 
     let key = "nuget"
     let name = "MsBuild Nuget DependencyManager"
 
     let generatedScripts = ConcurrentDictionary<string, string>()
 
-    let getProjectDirectory () =
+    let projectDirectory, cacheDirectory =
         let createDirectory directory =
             lazy
                 try
@@ -323,20 +323,19 @@ type FSharpDependencyManager(outputDirectory: string option, _useResultsCache: b
             | Some v -> Path.Combine(specialDir, v)
             | _ -> specialDir
 
-        createDirectory (Path.Combine(root, "Projects", path))
+        createDirectory (Path.Combine(root, "Projects", path)), createDirectory (Path.Combine(root, "Cache"))
 
     let deleteScripts () =
-        ()
-//         try
-// #if !DEBUG
-//             if projectDirectory.IsValueCreated then
-//                 if Directory.Exists(projectDirectory.Value) then
-//                     Directory.Delete(projectDirectory.Value, true)
-// #else
-//             ()
-// #endif
-//         with _ ->
-//             ()
+        try
+#if !DEBUG
+            if projectDirectory.IsValueCreated then
+                if Directory.Exists(projectDirectory.Value) then
+                    Directory.Delete(projectDirectory.Value, true)
+#else
+            ()
+#endif
+        with _ ->
+            ()
 
     let emitFile fileName (body: string) =
         try
@@ -348,6 +347,7 @@ type FSharpDependencyManager(outputDirectory: string option, _useResultsCache: b
 
     let prepareDependencyResolutionFiles
         (
+            scriptDirectory: string,
             scriptExt: string,
             directiveLines: (string * string) seq,
             targetFrameworkMoniker: string,
@@ -369,64 +369,72 @@ type FSharpDependencyManager(outputDirectory: string option, _useResultsCache: b
             |> List.map FSharpDependencyManager.formatPackageReference
             |> Seq.concat
 
+        let generatedNugetSources =
+            generateSourcesFromNugetConfigs scriptDirectory projectDirectory.Value timeout
+
         let packageReferenceText = String.Join(Environment.NewLine, packageReferenceLines)
 
-        let projectPath = Path.Combine(getProjectDirectory().Value, "Project.fsproj")
+        let projectPath = Path.Combine(projectDirectory.Value, "Project.fsproj")
+        let nugetPath = Path.Combine(projectDirectory.Value, "NuGet.config")
 
         let generateAndBuildProjectArtifacts =
             let writeFile path body =
                 if not (generatedScripts.ContainsKey(body.GetHashCode().ToString())) then
                     emitFile path body
 
-            let generateProjBody =
-                generateProjectBody
+            let generateProjectFile =
+                generateProjectFile
                     .Replace("$(TARGETFRAMEWORK)", targetFrameworkMoniker)
                     .Replace("$(RUNTIMEIDENTIFIER)", runtimeIdentifier)
                     .Replace("$(PACKAGEREFERENCES)", packageReferenceText)
                     .Replace("$(SCRIPTEXTENSION)", scriptExt)
+
+            let generateProjectNugetConfigFile =
+                generateProjectNugetConfigFile.Replace("$(NUGET_SOURCES)", generatedNugetSources)
 
             let timeout =
                 match package_timeout with
                 | Some _ -> package_timeout
                 | None -> Some timeout
 
-            writeFile projectPath generateProjBody
+            writeFile projectPath generateProjectFile
+            writeFile nugetPath generateProjectNugetConfigFile
             buildProject projectPath binLogPath timeout
 
         generateAndBuildProjectArtifacts
 
-    // let tryGetResultsForResolutionHash hash (projectDirectory: Lazy<string>) : PackageBuildResolutionResult option =
-    //     match hash with
-    //     | Some hash when useResultsCache = true ->
-    //         let resolutionsFile =
-    //             Path.Combine(cacheDirectory.Value, (hash + ".resolvedReferences.paths"))
-    //
-    //         if File.Exists(resolutionsFile) then
-    //             let resolutions, references, loads, includes =
-    //                 let resolutions = getResolutionsFromFile resolutionsFile
-    //                 let references = (findReferencesFromResolutions resolutions) |> Array.toList
-    //                 let loads = (findLoadsFromResolutions resolutions) |> Array.toList
-    //                 let includes = (findIncludesFromResolutions resolutions) |> Array.toList
-    //                 resolutions, references, loads, includes
-    //
-    //             if verifyFilesExist (references) then
-    //                 Some
-    //                     {
-    //                         success = true
-    //                         projectPath = Path.Combine(projectDirectory.Value, "Project.fsproj")
-    //                         stdOut = [||]
-    //                         stdErr = [||]
-    //                         resolutionsFile = Some resolutionsFile
-    //                         resolutions = resolutions
-    //                         references = references
-    //                         loads = loads
-    //                         includes = includes
-    //                     }
-    //             else
-    //                 None
-    //         else
-    //             None
-    //     | _ -> None
+    let tryGetResultsForResolutionHash hash (projectDirectory: Lazy<string>) : PackageBuildResolutionResult option =
+        match hash with
+        | Some hash when useResultsCache = true ->
+            let resolutionsFile =
+                Path.Combine(cacheDirectory.Value, (hash + ".resolvedReferences.paths"))
+
+            if File.Exists(resolutionsFile) then
+                let resolutions, references, loads, includes =
+                    let resolutions = getResolutionsFromFile resolutionsFile
+                    let references = (findReferencesFromResolutions resolutions) |> Array.toList
+                    let loads = (findLoadsFromResolutions resolutions) |> Array.toList
+                    let includes = (findIncludesFromResolutions resolutions) |> Array.toList
+                    resolutions, references, loads, includes
+
+                if verifyFilesExist (references) then
+                    Some
+                        {
+                            success = true
+                            projectPath = Path.Combine(projectDirectory.Value, "Project.fsproj")
+                            stdOut = [||]
+                            stdErr = [||]
+                            resolutionsFile = Some resolutionsFile
+                            resolutions = resolutions
+                            references = references
+                            loads = loads
+                            includes = includes
+                        }
+                else
+                    None
+            else
+                None
+        | _ -> None
 
     do AppDomain.CurrentDomain.ProcessExit |> Event.add (fun _ -> deleteScripts ())
 
@@ -449,9 +457,8 @@ type FSharpDependencyManager(outputDirectory: string option, _useResultsCache: b
         |]
 
     member _.ClearResultsCache() =
-        // Directory.Delete(cacheDirectory.Value, true)
-        // Directory.CreateDirectory(cacheDirectory.Value) |> ignore
-        ()
+        Directory.Delete(cacheDirectory.Value, true)
+        Directory.CreateDirectory(cacheDirectory.Value) |> ignore
 
     member _.ResolveDependencies
         (
@@ -471,32 +478,34 @@ type FSharpDependencyManager(outputDirectory: string option, _useResultsCache: b
             | _ -> "#r @\""
 
         let generateAndBuildProjectArtifacts =
-            let configIncludes =
-                generateSourcesFromNugetConfigs scriptDirectory (getProjectDirectory().Value) timeout
-
-            let directiveLines = Seq.append packageManagerTextLines configIncludes
-
-            // let resolutionHash =
-                // FSharpDependencyManager.computeHashForResolutionInputs (
-                //     scriptExt,
-                //     directiveLines,
-                //     targetFrameworkMoniker,
-                //     runtimeIdentifier
-                // )
+            let resolutionHash =
+                FSharpDependencyManager.computeHashForResolutionInputs (
+                    scriptExt,
+                    packageManagerTextLines,
+                    targetFrameworkMoniker,
+                    runtimeIdentifier
+                )
 
             let fromCache, resolutionResult =
-                    // match tryGetResultsForResolutionHash resolutionHash projectDirectory with
-                    // | Some resolutionResult -> true, resolutionResult
-                    // | None ->
-                    false, prepareDependencyResolutionFiles (scriptExt, directiveLines, targetFrameworkMoniker, runtimeIdentifier, timeout)
+                match tryGetResultsForResolutionHash resolutionHash projectDirectory with
+                | Some resolutionResult -> true, resolutionResult
+                | None ->
+                    false,
+                    prepareDependencyResolutionFiles (
+                        scriptDirectory,
+                        scriptExt,
+                        packageManagerTextLines,
+                        targetFrameworkMoniker,
+                        runtimeIdentifier,
+                        timeout
+                    )
 
             match resolutionResult.resolutionsFile with
-            | Some _ ->
+            | Some file ->
                 let generatedScriptPath =
-                    // match resolutionHash with
-                    // | Some hash -> Path.Combine(cacheDirectory.Value, hash) + scriptExt
-                    // | None ->
-                    resolutionResult.projectPath + scriptExt
+                    match resolutionHash with
+                    | Some hash -> Path.Combine(cacheDirectory.Value, hash) + scriptExt
+                    | None -> resolutionResult.projectPath + scriptExt
 
                 // We have succeeded to gather information -- generate script and copy the results to the cache
                 if not (fromCache) then
@@ -505,9 +514,9 @@ type FSharpDependencyManager(outputDirectory: string option, _useResultsCache: b
 
                     emitFile generatedScriptPath generatedScriptBody
 
-                    // match resolutionHash with
-                    // | Some hash -> File.Copy(file, Path.Combine(cacheDirectory.Value, hash + ".resolvedReferences.paths"), true)
-                    // | None -> ()
+                    match resolutionHash with
+                    | Some hash -> File.Copy(file, Path.Combine(cacheDirectory.Value, hash + ".resolvedReferences.paths"), true)
+                    | None -> ()
 
                 ResolveDependenciesResult(
                     resolutionResult.success,

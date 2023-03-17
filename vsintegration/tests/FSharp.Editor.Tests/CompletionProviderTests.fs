@@ -141,7 +141,9 @@ System.Console.WriteLine(x + y)
                     IntelliSenseOptions.Default
                 )
 
-            triggered |> Assert.shouldBeEqualWith shouldBeTriggered 
+            triggered
+            |> Assert.shouldBeEqualWith
+                shouldBeTriggered
                 "FSharpCompletionProvider.ShouldTriggerCompletionAux() should compute the correct result"
 
     [<Fact>]
@@ -242,7 +244,9 @@ let z = $"abc  {System.Console.WriteLine(x + y)} def"
                     IntelliSenseOptions.Default
                 )
 
-            triggered |> Assert.shouldBeEqualWith shouldBeTriggered 
+            triggered
+            |> Assert.shouldBeEqualWith
+                shouldBeTriggered
                 $"FSharpCompletionProvider.ShouldTriggerCompletionAux() should compute the correct result for marker '{marker}"
 
     [<Fact>]
@@ -731,6 +735,31 @@ open type System.Ma
 
         let expected = [ "Management"; "Math" ] // both namespace and static type
         VerifyCompletionList(fileContents, "System.Ma", expected, [])
+
+    [<Fact>]
+    let ``No completion on nested module identifier, incomplete`` () =
+        let fileContents =
+            """
+    module Namespace.Top
+
+    module Nest
+
+    let a = ()
+    """
+
+        VerifyNoCompletionList(fileContents, "Nest")
+
+    [<Fact>]
+    let ``No completion on nested module identifier`` () =
+        let fileContents =
+            """
+    namespace N
+
+    module Nested =
+        do ()
+    """
+
+        VerifyNoCompletionList(fileContents, "Nested")
 
     [<Fact>]
     let ``No completion on type name at declaration site`` () =
