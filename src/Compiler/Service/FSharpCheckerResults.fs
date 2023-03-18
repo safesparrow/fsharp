@@ -9,6 +9,8 @@ open System
 open System.Diagnostics
 open System.IO
 open System.Reflection
+open System.Runtime.Serialization.Json
+open System.Text
 open System.Threading
 open FSharp.Compiler.IO
 open FSharp.Compiler.NicePrint
@@ -58,6 +60,7 @@ open FSharp.Compiler.BuildGraph
 open Internal.Utilities
 open Internal.Utilities.Collections
 open FSharp.Compiler.AbstractIL.ILBinaryReader
+open Newtonsoft.Json
 
 type FSharpUnresolvedReferencesSet = FSharpUnresolvedReferencesSet of UnresolvedAssemblyReference list
 
@@ -2412,6 +2415,8 @@ module internal ParseAndCheckFile =
 
         matchingBraces.ToArray()
 
+    let mutable idx = 0
+    
     let parseFile
         (
             sourceText: ISourceText,
@@ -2423,9 +2428,19 @@ module internal ParseAndCheckFile =
         ) =
         Trace.TraceInformation("FCS: {0}.{1} ({2})", userOpName, "parseFile", fileName)
 
-        use act =
-            Activity.start "ParseAndCheckFile.parseFile" [| Activity.Tags.fileName, fileName |]
-
+        let date = DateTime.Now.ToString("HHmmssfff")
+        let path = $"c:/projekty/fsharp/parsing/{idx}_{date}_{Path.GetFileNameWithoutExtension(fileName)}.json"
+        let data =
+            {|
+              Text = sourceText.GetSubTextString(0, sourceText.Length)
+              FileName = fileName
+              Options = options
+              UserOpName = userOpName
+              Suggest = suggestNamesForErrors
+              Ident = identCapture
+              |}
+        File.WriteAllText(path, Newtonsoft.Json.JsonConvert.SerializeObject(data, Formatting.Indented))
+        
         let errHandler =
             DiagnosticsHandler(true, fileName, options.DiagnosticOptions, sourceText, suggestNamesForErrors)
 
