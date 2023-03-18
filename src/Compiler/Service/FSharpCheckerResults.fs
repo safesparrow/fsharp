@@ -2453,7 +2453,8 @@ module internal ParseAndCheckFile =
                         None,
                         fileName,
                         (isLastCompiland, isExe),
-                        identCapture
+                        identCapture,
+                        Some userOpName
                     )
                 with e ->
                     errHandler.DiagnosticsLogger.StopProcessingRecovery e range0 // don't re-raise any exceptions, we must return None.
