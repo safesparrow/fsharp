@@ -22,8 +22,10 @@ do ()
 [<EntryPoint>]
 let main (argv) =
 
-    System.Runtime.ProfileOptimization.SetProfileRoot(@"C:/projekty/fsharp/fsc_profiles");
-    System.Runtime.ProfileOptimization.StartProfile("fsc.Startup.Profile");
+    if Environment.GetEnvironmentVariable "FSC_Profile" = "1" then
+        printfn "Using profile optimization"
+        System.Runtime.ProfileOptimization.SetProfileRoot(@"C:/projekty/fsharp/fsc_profiles");
+        System.Runtime.ProfileOptimization.StartProfile($"{System.IO.Path.GetFileName(Environment.CurrentDirectory)}.fsc.Startup.Profile")
     
     let compilerName =
         // the 64 bit desktop version of the compiler is name fscAnyCpu.exe, all others are fsc.exe
