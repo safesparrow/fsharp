@@ -18,6 +18,18 @@
     <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
 
+  <!-- JIT settings for the compiler process, written to fsc.runtimeconfig.json.
+       fsc is short-lived and keeps JIT-compiling new methods for most of its run. With the default settings, the
+       call-counting delay is extended by every new tier-0 method, so hot code waits a long time for tier 1, and tiered
+       PGO adds an instrumented tier before it. Turning both off makes compilation substantially faster.
+       DOTNET_TieredPGO / DOTNET_TC_CallCountingDelayMs env vars still override these. -->
+  <PropertyGroup>
+    <TieredPGO>false</TieredPGO>
+  </PropertyGroup>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation.CallCountingDelayMs" Value="0" />
+  </ItemGroup>
+
   <!--  The fsc application does not provide a referencable public interface  -->
   <PropertyGroup>
     <NoOptimizationData>true</NoOptimizationData>
