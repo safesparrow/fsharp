@@ -355,6 +355,11 @@ this file.
         <PropertyGroup>
             <FscOtherFlags Condition="'$(SimpleResolution)' == 'true'">--simpleresolution $(OtherFlags)</FscOtherFlags>
             <FscOtherFlags Condition="'$(SimpleResolution)' != 'true'">$(OtherFlags)</FscOtherFlags>
+            <!-- Runtime/JIT settings for the fsc process. fsc is a short-lived, JIT-heavy process:
+                 disable dynamic PGO instrumentation (TieredPGO) and the tier-1 call counting delay so hot
+                 methods reach optimized code sooner. Set FscEnvironmentVariables to override, or
+                 DisableFscJitTuning=true to opt out. -->
+            <FscEnvironmentVariables Condition="'$(FscEnvironmentVariables)' == '' and '$(DisableFscJitTuning)' != 'true'">DOTNET_TieredPGO=0;DOTNET_TC_CallCountingDelayMs=0</FscEnvironmentVariables>
         </PropertyGroup>
 
         <!-- Condition is to filter out the _CoreCompileResourceInputs so that it doesn't pass in culture resources to the compiler -->
@@ -373,6 +378,7 @@ this file.
               DisabledWarnings="$(NoWarn)"
               DocumentationFile="$(DocumentationFile)"
               DotnetFscCompilerPath="$(DotnetFscCompilerPath)"
+              EnvironmentVariables="$(FscEnvironmentVariables)"
               EmbedAllSources="$(EmbedAllSources)"
               Embed="@(EmbeddedFiles)"
               GenerateInterfaceFile="$(GenerateInterfaceFile)"
